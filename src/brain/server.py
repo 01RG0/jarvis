@@ -25,6 +25,7 @@ load_dotenv()
 
 from db import init_db, log_call, get_spend_summary, get_recent_tasks  # noqa: E402
 from planner import handle_task  # noqa: E402
+from notifier import notify_task_complete, notify_error  # noqa: E402
 
 BRAIN_PORT = int(os.environ.get("BRAIN_PORT", "8001"))
 WATCHDOG_HEARTBEAT_URL = "http://localhost:8099/heartbeat"
@@ -102,6 +103,8 @@ async def submit_task(task: TaskRequest) -> TaskResponse:
         raw, task.model, elapsed_ms
     )
     log_call(task.input, result, model_used, cost_usd, duration_ms)
+    if cost_usd > 0 or len(result) > 50:
+        notify_task_complete(task.id, result, cost_usd)
     return TaskResponse(
         task_id=task.id,
         result=result,

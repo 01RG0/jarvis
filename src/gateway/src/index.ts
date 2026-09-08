@@ -45,6 +45,33 @@ app.get('/dashboard/alerts', async (_req, res) => {
   } catch { res.json([]) }
 })
 
+// Worker registry — PC workers POST here to announce presence
+interface WorkerRecord {
+  worker_id: string
+  hostname: string
+  platform: string
+  ts: number
+  status: string
+  last_seen: number
+}
+const workers = new Map<string, WorkerRecord>()
+
+app.post('/workers/register', (req, res) => {
+  const body = req.body as Partial<WorkerRecord>
+  if (!body.worker_id) { res.status(400).json({ error: 'worker_id required' }); return }
+  workers.set(body.worker_id, { ...body as WorkerRecord, last_seen: Date.now() })
+  res.json({ ok: true })
+})
+
+app.get('/workers', (_req, res) => {
+  const now = Date.now()
+  const list = Array.from(workers.values()).map(w => ({
+    ...w,
+    alive: now - w.last_seen < 90_000,
+  }))
+  res.json(list)
+})
+
 const server = http.createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws' })
 setupWebSocket(wss)
