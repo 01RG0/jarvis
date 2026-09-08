@@ -48,16 +48,29 @@ func (h *HeartbeatServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *HeartbeatServer) checkStalls() {
-	for range time.Tick(10 * time.Second) {
-		h.mu.Lock()
-		for id, t := range h.lastSeen {
-			if time.Since(t) > h.timeout {
-				log.Printf("[watchdog] task stalled: %s (last heartbeat %v ago)", id, time.Since(t).Round(time.Second))
-				delete(h.lastSeen, id)
-			}
+// sweepStalls removes tasks whose last heartbeat is older than h.timeout
+// relative to now. Returns the IDs that were removed.
+func (h *HeartbeatServer) sweepStalls(now time.Time) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var stalled []string
+	for id, t := range h.lastSeen {
+		if now.Sub(t) > h.timeout {
+			stalled = append(stalled, id)
+			delete(h.lastSeen, id)
 		}
-		h.mu.Unlock()
+	}
+	return stalled
+}
+
+func (h *HeartbeatServer) checkStalls() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		stalled := h.sweepStalls(time.Now())
+		for _, id := range stalled {
+			log.Printf("[watchdog] task stalled: %s", id)
+		}
 	}
 }
 

@@ -1,0 +1,44 @@
+{
+  "skills": [
+    {
+      "name": "cli-tracker",
+      "description": "Tracks CLI sub-agent delegation, invocation patterns, fallbacks, and logs.",
+      "path": ".claude/skills/cli-tracker/SKILL.md",
+      "created_by": "coordinator",
+      "created_at": "2026-09-09T00:00:00Z",
+      "tags": ["cli", "delegation", "grok", "agy", "codex", "logging"]
+    },
+    {
+      "name": "phase-runner",
+      "description": "Runs Jarvis build phases 0-7, reads plan docs, chains phases automatically.",
+      "path": ".claude/skills/phase-runner/SKILL.md",
+      "created_by": "coordinator",
+      "created_at": "2026-09-09T00:00:00Z",
+      "tags": ["phase", "build", "planning", "jarvis"]
+    },
+    {
+      "name": "swarm-log",
+      "description": "Reads and writes CLI swarm delegation log, shows dashboard.",
+      "path": ".claude/skills/swarm-log/SKILL.md",
+      "created_by": "coordinator",
+      "created_at": "2026-09-09T00:00:00Z",
+      "tags": ["logging", "dashboard", "swarm", "cli"]
+    },
+    {
+      "name": "auto-skill-creator",
+      "description": "Creates new Claude Code skills from capability descriptions.",
+      "path": ".claude/skills/auto-skill-creator/SKILL.md",
+      "created_by": "coordinator",
+      "created_at": "2026-09-09T00:00:00Z",
+      "tags": ["meta", "skill", "creation", "schema"]
+    },
+    {
+      "name": "plugin-loader",
+      "description": "Discovers and applies Claude Code skills and plugins at runtime.",
+      "path": ".claude/skills/plugin-loader/SKILL.md",
+      "created_by": "coordinator",
+      "created_at": "2026-09-09T00:00:00Z",
+      "tags": ["plugin", "skill", "discovery", "runtime"]
+    }
+  ]
+}

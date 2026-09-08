@@ -45,3 +45,11 @@ Thumbs.db
 
 # LiteLLM proxy (if ever used)
 litellm_proxy/
+
+# Reference repos cloned for research — not source code
+refs/
+go-install/
+
+# Claude Code hooks log (runtime output)
+.claude/hooks/logs/
+.claude/hooks/config/hooks-config.local.json

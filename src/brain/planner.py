@@ -3,7 +3,7 @@ from typing import TypedDict
 from llm_router import call_llm
 from langgraph.graph import StateGraph, END
 
-ACTION_KEYWORDS = {"deploy", "create", "build", "write", "fix", "search"}
+ACTION_KEYWORDS = {"deploy", "create", "build", "write", "fix", "search", "read", "find", "run", "execute"}
 
 
 class TaskState(TypedDict):
@@ -18,6 +18,8 @@ class TaskState(TypedDict):
     cost_usd: float
     duration_ms: int
     memory_context: str
+    skill_context: str
+    tool_result: str
 
 
 def route_node(state: TaskState) -> TaskState:
@@ -31,6 +33,46 @@ def memory_node(state: TaskState) -> TaskState:
     from memory import get_memory
     context = get_memory().get_context(state['input'])
     return {**state, 'memory_context': context}
+
+
+def tool_node(state: TaskState) -> TaskState:
+    """Run the best matching Jarvis tool for this task. If none found, auto-forge one."""
+    try:
+        from tool_registry import run_for_task
+        result = run_for_task(state['input'])
+        if result and result.success:
+            return {**state, 'tool_result': f"[{result.tool_name}]: {result.output}"}
+        if result and not result.success:
+            # Tool exists but failed — try to forge a better one
+            from tool_forge import auto_forge_from_gap
+            auto_forge_from_gap(result.error, state['input'])
+    except Exception:
+        pass
+    # No tool matched — check if we should forge one
+    try:
+        from tool_registry import find_for_task
+        if not find_for_task(state['input']):
+            from tool_forge import forge_tool
+            forge_tool(state['input'])
+            # Try again after forging
+            from tool_registry import run_for_task
+            result = run_for_task(state['input'])
+            if result and result.success:
+                return {**state, 'tool_result': f"[{result.tool_name}]: {result.output}"}
+    except Exception:
+        pass
+    return {**state, 'tool_result': ''}
+
+
+def skill_node(state: TaskState) -> TaskState:
+    try:
+        from skill_registry import find_skill_for_task, get_skill_content
+        name = find_skill_for_task(state['input'])
+        content = get_skill_content(name) if name else None
+        skill_context = f"Relevant skill [{name}]:\n{content}" if content else ""
+    except Exception:
+        skill_context = ""
+    return {**state, 'skill_context': skill_context}
 
 
 def fast_node(state: TaskState) -> TaskState:
@@ -48,7 +90,15 @@ def fast_node(state: TaskState) -> TaskState:
 
 
 def plan_node(state: TaskState) -> TaskState:
-    prompt = f'{state["memory_context"]}\n\nTask: {state["input"]}\n\nBreak this into steps:' if state['memory_context'] else f'Task: {state["input"]}\nBreak this into steps:'
+    parts = []
+    if state.get('memory_context'):
+        parts.append(state['memory_context'])
+    if state.get('skill_context'):
+        parts.append(state['skill_context'])
+    if state.get('tool_result'):
+        parts.append(f"Tool output:\n{state['tool_result']}")
+    parts.append(f'Task: {state["input"]}\n\nBreak this into steps:')
+    prompt = '\n\n'.join(parts)
     res = call_llm('balanced', prompt)
     return {**state, "plan": res["content"]}
 
@@ -123,6 +173,12 @@ def save_memory_node(state: TaskState) -> TaskState:
             attempts=state['attempts'],
             model_used=state['model_used'],
         )
+        # Detect capability gap and auto-forge a skill if needed
+        try:
+            from skill_forge import auto_forge_from_gap
+            auto_forge_from_gap(state.get('result', '') + state['error'], state['input'])
+        except Exception:
+            pass
     return state
 
 
@@ -141,10 +197,14 @@ def build_graph() -> StateGraph:
     for fn in (route_node, fast_node, plan_node, execute_node, verify_node, retry_node, output_node):
         g.add_node(fn.__name__, fn)
     g.add_node('memory_node', memory_node)
+    g.add_node('skill_node', skill_node)
+    g.add_node('tool_node', tool_node)
     g.add_node('save_memory_node', save_memory_node)
     g.set_entry_point("route_node")
     g.add_conditional_edges("route_node", _route_after_route, {"fast": "fast_node", "slow": "memory_node"})
-    g.add_edge('memory_node', 'plan_node')
+    g.add_edge('memory_node', 'skill_node')
+    g.add_edge('skill_node', 'tool_node')
+    g.add_edge('tool_node', 'plan_node')
     g.add_edge("fast_node", "save_memory_node")
     g.add_edge("plan_node", "execute_node")
     g.add_edge("execute_node", "verify_node")
@@ -171,8 +231,10 @@ async def handle_task(task_id: str, input: str, model: str = "balanced") -> dict
         "cost_usd": 0.0,
         "duration_ms": 0,
         'memory_context': '',
+        'skill_context': '',
+        'tool_result': '',
     }
-    result_state = await asyncio.get_event_loop().run_in_executor(None, graph.invoke, state)
+    result_state = await asyncio.get_running_loop().run_in_executor(None, graph.invoke, state)
     return {
         "result": result_state["result"],
         "model_used": result_state["model_used"],

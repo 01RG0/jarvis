@@ -152,5 +152,21 @@ async def dashboard_alerts() -> list:
     return []
 
 
+class ForgeToolRequest(BaseModel):
+    capability: str
+
+
+@app.post("/forge-tool")
+async def forge_tool_endpoint(body: ForgeToolRequest) -> dict:
+    from tool_forge import forge_tool
+    return forge_tool(body.capability)
+
+
+@app.get("/tools")
+async def list_tools_endpoint() -> list:
+    from tool_registry import list_tools
+    return list_tools()
+
+
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=BRAIN_PORT, reload=False)

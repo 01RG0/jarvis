@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+// nextBackoff returns the next backoff duration, capped at max.
+func nextBackoff(current, max time.Duration) time.Duration {
+	next := current * 2
+	if next > max {
+		return max
+	}
+	return next
+}
+
 func supervise(command string) {
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
@@ -26,9 +35,6 @@ func supervise(command string) {
 			log.Printf("[watchdog] process exited cleanly — restarting in %v", backoff)
 		}
 		time.Sleep(backoff)
-		backoff *= 2
-		if backoff > maxBackoff {
-			backoff = maxBackoff
-		}
+		backoff = nextBackoff(backoff, maxBackoff)
 	}
 }

@@ -1,6 +1,6 @@
 import shutil, os
 
-KNOWN_CLIS = ['codex', 'agy', 'kilo', 'grok', 'agent', 'vibe', 'freebuff']
+KNOWN_CLIS = ['codex', 'agy', 'kilo', 'grok', 'vibe', 'freebuff']
 
 def detect_available_clis() -> dict[str, bool]:
     return {cli: shutil.which(cli) is not None for cli in KNOWN_CLIS}

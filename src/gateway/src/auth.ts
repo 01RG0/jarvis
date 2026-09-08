@@ -1,7 +1,11 @@
 import jwt from 'jsonwebtoken'
 import { IncomingMessage } from 'http'
 
-const SECRET = process.env.GATEWAY_SECRET_KEY || 'dev-secret'
+const _rawSecret = process.env.GATEWAY_SECRET_KEY
+if (!_rawSecret) {
+  throw new Error('GATEWAY_SECRET_KEY env var is required — generate with: openssl rand -hex 32')
+}
+const SECRET: string = _rawSecret
 
 export function verifyToken(token: string): boolean {
   try {
