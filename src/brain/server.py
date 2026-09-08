@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 load_dotenv()
 
-from db import init_db, log_call  # noqa: E402
+from db import init_db, log_call, get_spend_summary, get_recent_tasks  # noqa: E402
 from planner import handle_task  # noqa: E402
 
 BRAIN_PORT = int(os.environ.get("BRAIN_PORT", "8001"))
@@ -120,6 +120,33 @@ async def health() -> HealthResponse:
 async def heartbeat(body: HeartbeatRequest, background_tasks: BackgroundTasks) -> dict:
     background_tasks.add_task(_forward_heartbeat, body.task_id, body.status)
     return {"ok": True}
+
+
+@app.get("/dashboard/spend")
+async def dashboard_spend() -> list:
+    return get_spend_summary()
+
+
+@app.get("/dashboard/tasks")
+async def dashboard_tasks() -> list:
+    return get_recent_tasks(50)
+
+
+@app.get("/dashboard/memory")
+async def dashboard_memory() -> list:
+    try:
+        from memory import get_memory
+        raw = get_memory().memory.get_all(user_id='jarvis_user') or []
+        if isinstance(raw, dict):
+            raw = raw.get('results', [])
+        return [{'id': str(i), 'memory': m.get('memory', '') if isinstance(m, dict) else str(m)} for i, m in enumerate(raw)]
+    except Exception:
+        return []
+
+
+@app.get("/dashboard/alerts")
+async def dashboard_alerts() -> list:
+    return []
 
 
 if __name__ == "__main__":

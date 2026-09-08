@@ -1,6 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
+
+const ArcReactor = dynamic(() => import('../components/ArcReactor'), { ssr: false })
+const Dashboard = dynamic(() => import('../components/Dashboard'), { ssr: false })
 
 interface Message {
   id: string
@@ -18,6 +22,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [voiceMode, setVoiceMode] = useState(false)
   const [voiceActive, setVoiceActive] = useState(false)
+  const [showDash, setShowDash] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const voiceWsRef = useRef<WebSocket | null>(null)
@@ -26,7 +31,6 @@ export default function Home() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const pendingRef = useRef<Map<string, (msg: Message) => void>>(new Map())
 
-  // Text chat WebSocket
   useEffect(() => {
     const url = `${GW_URL}/ws?token=${GW_TOKEN}`
     let retries = 0
@@ -72,7 +76,6 @@ export default function Home() {
     })
   }
 
-  // Voice mode: connect to /voice proxy, stream mic audio, play back audio chunks
   const startVoice = useCallback(async () => {
     if (voiceActive) return
     try {
@@ -80,7 +83,6 @@ export default function Home() {
       const voiceUrl = `${GW_URL}/voice?token=${GW_TOKEN}`
       const vws = new WebSocket(voiceUrl)
       voiceWsRef.current = vws
-
       audioContextRef.current = new AudioContext({ sampleRate: 16000 })
       const audioCtx = audioContextRef.current
 
@@ -90,9 +92,7 @@ export default function Home() {
         const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
         mediaRecorderRef.current = recorder
         recorder.ondataavailable = (e) => {
-          if (e.data.size > 0 && vws.readyState === WebSocket.OPEN) {
-            vws.send(e.data)
-          }
+          if (e.data.size > 0 && vws.readyState === WebSocket.OPEN) vws.send(e.data)
         }
         recorder.start(100)
       }
@@ -105,9 +105,7 @@ export default function Home() {
             source.buffer = decoded
             source.connect(audioCtx.destination)
             source.start()
-          } catch {
-            // non-audio frame, ignore
-          }
+          } catch { /* non-audio frame */ }
         }
       }
 
@@ -127,93 +125,109 @@ export default function Home() {
     setVoiceActive(false)
   }, [])
 
-  const toggleVoice = () => {
-    if (voiceActive) {
-      stopVoice()
-    } else {
-      startVoice()
-    }
-  }
-
   return (
-    <div className="flex flex-col h-screen bg-[#0a0a0a] text-white">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-        <span className="text-lg font-semibold tracking-widest">JARVIS</span>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setVoiceMode(v => !v)}
-            className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-              voiceMode
-                ? 'border-blue-500 text-blue-400'
-                : 'border-zinc-600 text-zinc-500 hover:border-zinc-400 hover:text-zinc-300'
-            }`}
-          >
-            {voiceMode ? 'Voice On' : 'Voice Off'}
-          </button>
-          <div className="flex items-center gap-2 text-sm text-zinc-400">
-            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-            {connected ? 'Connected' : 'Disconnected'}
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-        {messages.length === 0 && (
-          <p className="text-zinc-600 text-center mt-20 text-sm">Say something to Jarvis</p>
-        )}
-        {messages.map((m) => (
-          <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[70%] px-4 py-2 rounded-lg text-sm whitespace-pre-wrap ${
-              m.role === 'user' ? 'bg-white text-black' : 'bg-zinc-800 text-white'
-            }`}>
-              {m.content}
+    <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
+      {/* Main chat panel */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800 shrink-0">
+          <div className="flex items-center gap-4">
+            <ArcReactor active={connected} speaking={voiceActive} size={48} />
+            <div>
+              <span className="text-base font-semibold tracking-widest">JARVIS</span>
+              <div className="flex items-center gap-2 text-xs text-zinc-500 mt-0.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
+                {connected ? 'Online' : 'Offline'}
+                {voiceActive && <span className="text-blue-400 animate-pulse">· Speaking</span>}
+              </div>
             </div>
           </div>
-        ))}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-zinc-800 px-4 py-2 rounded-lg text-sm text-zinc-400 animate-pulse">
-              Thinking...
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input */}
-      <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900">
-        <div className="flex gap-3">
-          <input
-            className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
-            placeholder="Message Jarvis..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          />
-          {voiceMode && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={toggleVoice}
-              className={`w-10 h-10 flex items-center justify-center rounded-full text-lg transition-colors ${
-                voiceActive
-                  ? 'bg-red-600 hover:bg-red-500 animate-pulse'
-                  : 'bg-blue-700 hover:bg-blue-600'
+              onClick={() => setVoiceMode(v => !v)}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                voiceMode ? 'border-blue-500 text-blue-400' : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
               }`}
-              title={voiceActive ? 'Stop voice' : 'Start voice'}
             >
-              {voiceActive ? '■' : '🎙'}
+              {voiceMode ? 'Voice On' : 'Voice'}
             </button>
+            <button
+              onClick={() => setShowDash(d => !d)}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                showDash ? 'border-zinc-400 text-zinc-300' : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              Dashboard
+            </button>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+          {messages.length === 0 && (
+            <p className="text-zinc-600 text-center mt-20 text-sm">
+              {voiceMode ? 'Press the mic to speak to Jarvis' : 'Say something to Jarvis'}
+            </p>
           )}
-          <button
-            onClick={handleSend}
-            disabled={loading || !connected}
-            className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
+          {messages.map((m) => (
+            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[70%] px-4 py-2 rounded-lg text-sm whitespace-pre-wrap ${
+                m.role === 'user' ? 'bg-white text-black' : 'bg-zinc-800 text-white'
+              }`}>
+                {m.content}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-zinc-800 px-4 py-2 rounded-lg text-sm text-zinc-400 animate-pulse">
+                Thinking...
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900 shrink-0">
+          <div className="flex gap-3">
+            <input
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
+              placeholder="Message Jarvis..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            />
+            {voiceMode && (
+              <button
+                onClick={voiceActive ? stopVoice : startVoice}
+                className={`w-10 h-10 flex items-center justify-center rounded-full text-base transition-all ${
+                  voiceActive
+                    ? 'bg-red-600 hover:bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)] animate-pulse'
+                    : 'bg-blue-700 hover:bg-blue-600 shadow-[0_0_8px_rgba(59,130,246,0.4)]'
+                }`}
+                title={voiceActive ? 'Stop voice' : 'Start voice'}
+              >
+                {voiceActive ? '■' : '🎙'}
+              </button>
+            )}
+            <button
+              onClick={handleSend}
+              disabled={loading || !connected}
+              className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Dashboard sidebar */}
+      {showDash && (
+        <div className="w-72 shrink-0 border-l border-zinc-800">
+          <Dashboard />
+        </div>
+      )}
     </div>
   )
 }
