@@ -83,12 +83,17 @@ def verify_node(state: TaskState) -> TaskState:
 def retry_node(state: TaskState) -> TaskState:
     new_attempts = state["attempts"] + 1
     if new_attempts >= 3:
-        return {
-            **state,
-            "attempts": new_attempts,
-            "result": f"Unable to complete after 3 attempts. Last error: {state['error']}",
-            "error": "",
-        }
+        final_result = f"Unable to complete after 3 attempts. Last error: {state['error']}"
+        from learning import record_outcome
+        record_outcome(
+            task_input=state['input'],
+            result=final_result,
+            outcome='failure',
+            error=state['error'],
+            attempts=new_attempts,
+            model_used=state['model_used'],
+        )
+        return {**state, "attempts": new_attempts, "result": final_result, "error": ""}
     return {**state, "attempts": new_attempts, "error": ""}
 
 
@@ -97,9 +102,27 @@ def output_node(state: TaskState) -> TaskState:
 
 
 def save_memory_node(state: TaskState) -> TaskState:
+    from learning import OutcomeType, record_outcome
     if state['result'] and not state['error']:
         from memory import get_memory
         get_memory().update_from_conversation(state['input'], state['result'])
+        outcome: OutcomeType = 'success' if state['attempts'] <= 1 else 'retry'
+        record_outcome(
+            task_input=state['input'],
+            result=state['result'],
+            outcome=outcome,
+            attempts=state['attempts'],
+            model_used=state['model_used'],
+        )
+    elif state['error']:
+        record_outcome(
+            task_input=state['input'],
+            result=state.get('result', ''),
+            outcome='failure',
+            error=state['error'],
+            attempts=state['attempts'],
+            model_used=state['model_used'],
+        )
     return state
 
 
