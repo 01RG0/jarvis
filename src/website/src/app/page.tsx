@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 interface Message {
   id: string
@@ -8,31 +8,38 @@ interface Message {
   content: string
 }
 
+const GW_URL = (process.env.NEXT_PUBLIC_GATEWAY_URL || 'ws://localhost:8080')
+const GW_TOKEN = process.env.NEXT_PUBLIC_GATEWAY_TOKEN || 'dev-token'
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [connected, setConnected] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [voiceMode, setVoiceMode] = useState(false)
+  const [voiceActive, setVoiceActive] = useState(false)
+
   const wsRef = useRef<WebSocket | null>(null)
+  const voiceWsRef = useRef<WebSocket | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const pendingRef = useRef<Map<string, (msg: Message) => void>>(new Map())
 
+  // Text chat WebSocket
   useEffect(() => {
-    const url = (process.env.NEXT_PUBLIC_GATEWAY_URL || 'ws://localhost:8080') +
-      '?token=' + (process.env.NEXT_PUBLIC_GATEWAY_TOKEN || 'dev-token')
-
+    const url = `${GW_URL}/ws?token=${GW_TOKEN}`
     let retries = 0
     function connect() {
       const ws = new WebSocket(url)
       wsRef.current = ws
-
       ws.onopen = () => setConnected(true)
       ws.onclose = () => {
         setConnected(false)
         if (retries < 3) { retries++; setTimeout(connect, 2000) }
       }
       ws.onmessage = (e) => {
-        const data = JSON.parse(e.data)
+        const data = JSON.parse(e.data as string)
         const resolve = pendingRef.current.get(data.id)
         if (resolve) {
           pendingRef.current.delete(data.id)
@@ -56,7 +63,6 @@ export default function Home() {
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
     setInput('')
-
     new Promise<Message>((resolve) => {
       pendingRef.current.set(id, resolve)
       wsRef.current!.send(JSON.stringify({ id, input: userMsg.content }))
@@ -66,14 +72,89 @@ export default function Home() {
     })
   }
 
+  // Voice mode: connect to /voice proxy, stream mic audio, play back audio chunks
+  const startVoice = useCallback(async () => {
+    if (voiceActive) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const voiceUrl = `${GW_URL}/voice?token=${GW_TOKEN}`
+      const vws = new WebSocket(voiceUrl)
+      voiceWsRef.current = vws
+
+      audioContextRef.current = new AudioContext({ sampleRate: 16000 })
+      const audioCtx = audioContextRef.current
+
+      vws.binaryType = 'arraybuffer'
+      vws.onopen = () => {
+        setVoiceActive(true)
+        const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
+        mediaRecorderRef.current = recorder
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0 && vws.readyState === WebSocket.OPEN) {
+            vws.send(e.data)
+          }
+        }
+        recorder.start(100)
+      }
+
+      vws.onmessage = async (e) => {
+        if (e.data instanceof ArrayBuffer && e.data.byteLength > 0) {
+          try {
+            const decoded = await audioCtx.decodeAudioData(e.data.slice(0))
+            const source = audioCtx.createBufferSource()
+            source.buffer = decoded
+            source.connect(audioCtx.destination)
+            source.start()
+          } catch {
+            // non-audio frame, ignore
+          }
+        }
+      }
+
+      vws.onclose = () => {
+        setVoiceActive(false)
+        stream.getTracks().forEach(t => t.stop())
+      }
+    } catch (err) {
+      console.error('[voice] start failed:', err)
+    }
+  }, [voiceActive])
+
+  const stopVoice = useCallback(() => {
+    mediaRecorderRef.current?.stop()
+    voiceWsRef.current?.close()
+    audioContextRef.current?.close()
+    setVoiceActive(false)
+  }, [])
+
+  const toggleVoice = () => {
+    if (voiceActive) {
+      stopVoice()
+    } else {
+      startVoice()
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen bg-[#0a0a0a] text-white">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
         <span className="text-lg font-semibold tracking-widest">JARVIS</span>
-        <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-          {connected ? 'Connected' : 'Disconnected'}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setVoiceMode(v => !v)}
+            className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+              voiceMode
+                ? 'border-blue-500 text-blue-400'
+                : 'border-zinc-600 text-zinc-500 hover:border-zinc-400 hover:text-zinc-300'
+            }`}
+          >
+            {voiceMode ? 'Voice On' : 'Voice Off'}
+          </button>
+          <div className="flex items-center gap-2 text-sm text-zinc-400">
+            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
+            {connected ? 'Connected' : 'Disconnected'}
+          </div>
         </div>
       </div>
 
@@ -111,6 +192,19 @@ export default function Home() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
           />
+          {voiceMode && (
+            <button
+              onClick={toggleVoice}
+              className={`w-10 h-10 flex items-center justify-center rounded-full text-lg transition-colors ${
+                voiceActive
+                  ? 'bg-red-600 hover:bg-red-500 animate-pulse'
+                  : 'bg-blue-700 hover:bg-blue-600'
+              }`}
+              title={voiceActive ? 'Stop voice' : 'Start voice'}
+            >
+              {voiceActive ? '■' : '🎙'}
+            </button>
+          )}
           <button
             onClick={handleSend}
             disabled={loading || !connected}
