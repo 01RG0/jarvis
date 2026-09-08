@@ -1,0 +1,47 @@
+# Environment — NEVER commit API keys
+.env
+.env.local
+.env.*.local
+
+# Data directory (db, logs, task workdirs)
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.uv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Go
+bin/
+*.exe
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+
+# LiteLLM proxy (if ever used)
+litellm_proxy/
