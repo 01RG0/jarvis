@@ -1,0 +1,19 @@
+model_list:
+  - model_name: fast
+    litellm_params:
+      model: groq/llama-3.1-8b-instant
+      api_key: ${GROQ_API_KEY}
+  - model_name: balanced
+    litellm_params:
+      model: gemini/gemini-1.5-flash
+      api_key: ${GEMINI_API_KEY}
+  - model_name: smart
+    litellm_params:
+      model: gemini/gemini-1.5-pro
+      api_key: ${GEMINI_API_KEY}
+router_settings:
+  fallbacks:
+    - smart: [balanced, fast]
+    - balanced: [fast]
+  allowed_fails: 2
+  cooldown_time: 60
