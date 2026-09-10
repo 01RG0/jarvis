@@ -3,6 +3,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+_llm_model   = os.environ.get("MEM0_LLM_MODEL",   "gemini/gemini-2.5-flash")
+_embed_model = os.environ.get("MEM0_EMBED_MODEL",  "gemini/gemini-embedding-001")
+
+# Strip "gemini/" prefix for Mem0's google embedder provider
+_embed_model_id = _embed_model.replace("gemini/", "")
+
 
 def get_mem0_config() -> dict:
     return {
@@ -14,18 +20,17 @@ def get_mem0_config() -> dict:
             },
         },
         "llm": {
-            "provider": "anthropic",
+            "provider": "litellm",
             "config": {
-                "model": "claude-haiku-4-5-20251001",
-                "api_key": os.environ.get("ANTHROPIC_API_KEY", ""),
+                "model": _llm_model,
+                "api_key": os.environ.get("GEMINI_API_KEY", ""),
             },
         },
         "embedder": {
-            "provider": "openai",
+            "provider": "google",
             "config": {
-                "model": "text-embedding-v3",
-                "api_key": os.environ.get("ALIBABA_API_KEY", ""),
-                "openai_base_url": os.environ.get("ALIBABA_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
+                "model": _embed_model_id,
+                "api_key": os.environ.get("GEMINI_API_KEY", ""),
             },
         },
     }
