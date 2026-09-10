@@ -13,7 +13,10 @@ export function setupWebSocket(wss: WebSocketServer): void {
         }
         id = msg.id
         const result = await submitToBrain(msg.id, msg.input, msg.model)
-        ws.send(JSON.stringify({ id: msg.id, ...result }))
+        if (result.widget_cmd) {
+          ws.send(JSON.stringify({ type: 'widget', ...result.widget_cmd }))
+        }
+        ws.send(JSON.stringify({ id: msg.id, result: result.result, model_used: result.model_used }))
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err)
         ws.send(JSON.stringify({ id, error: message }))

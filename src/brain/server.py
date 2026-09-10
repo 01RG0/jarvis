@@ -172,6 +172,7 @@ async def submit_task(task: TaskRequest) -> TaskResponse:
     result, model_used, cost_usd, duration_ms = _normalize_result(
         raw, task.model, elapsed_ms
     )
+    widget_cmd = raw.get("widget_cmd") if isinstance(raw, dict) else None
     log_call(task.input, result, model_used, cost_usd, duration_ms)
     if cost_usd > 0 or len(result) > 50:
         notify_task_complete(task.id, result, cost_usd)
@@ -181,6 +182,7 @@ async def submit_task(task: TaskRequest) -> TaskResponse:
         model_used=model_used,
         cost_usd=cost_usd,
         duration_ms=duration_ms,
+        widget_cmd=widget_cmd if widget_cmd else None,
     )
 
 
