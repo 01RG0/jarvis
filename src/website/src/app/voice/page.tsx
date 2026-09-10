@@ -4,11 +4,11 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Mic, MicOff, Volume2 } from 'lucide-react';
 
 const VOICE_URL = process.env.NEXT_PUBLIC_VOICE_URL || 'wss://localhost/voice-pipeline';
-const WAKE_PHRASES = ['hey jarvis', 'jarvis'];
 const SAMPLE_RATE = 16000;
 const CHUNK_MS = 100;
+const RECONNECT_DELAY_MS = 3000;
 
-type Status = 'idle' | 'standby' | 'listening' | 'processing' | 'speaking' | 'error';
+type Status = 'idle' | 'listening' | 'processing' | 'speaking' | 'error' | 'reconnecting';
 
 interface Line {
   id: number;
@@ -19,46 +19,48 @@ interface Line {
 let _lid = 0;
 
 const STATUS_LABEL: Record<Status, string> = {
-  idle:       'OFFLINE',
-  standby:    'STANDBY',
-  listening:  'LISTENING',
-  processing: 'PROCESSING',
-  speaking:   'SPEAKING',
-  error:      'ERROR',
+  idle:         'OFFLINE',
+  listening:    'LISTENING',
+  processing:   'PROCESSING',
+  speaking:     'SPEAKING',
+  error:        'ERROR',
+  reconnecting: 'RECONNECTING',
 };
 
 const STATUS_COLOR: Record<Status, string> = {
-  idle:       'rgba(148,163,184,0.4)',
-  standby:    'rgba(0,168,255,0.5)',
-  listening:  'rgba(0,255,136,0.9)',
-  processing: 'rgba(251,191,36,0.9)',
-  speaking:   'rgba(0,168,255,0.9)',
-  error:      'rgba(239,68,68,0.9)',
+  idle:         'rgba(148,163,184,0.4)',
+  listening:    'rgba(0,255,136,0.9)',
+  processing:   'rgba(251,191,36,0.9)',
+  speaking:     'rgba(0,168,255,0.9)',
+  error:        'rgba(239,68,68,0.9)',
+  reconnecting: 'rgba(251,191,36,0.5)',
 };
 
 export default function VoicePage() {
-  const [status, setStatus]           = useState<Status>('idle');
-  const [transcript, setTranscript]   = useState('');
-  const [lines, setLines]             = useState<Line[]>([]);
-  const [micAllowed, setMicAllowed]   = useState<boolean | null>(null);
-  const [pttActive, setPttActive]     = useState(false);
+  const [status, setStatus]         = useState<Status>('idle');
+  const [lines, setLines]           = useState<Line[]>([]);
+  const [micAllowed, setMicAllowed] = useState<boolean | null>(null);
+  const [muted, setMuted]           = useState(false);
 
-  const wsRef       = useRef<WebSocket | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const sourceRef   = useRef<MediaStreamAudioSourceNode | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const streamRef   = useRef<MediaStream | null>(null);
-  const recogRef    = useRef<SpeechRecognition | null>(null);
-  const bottomRef   = useRef<HTMLDivElement>(null);
-  const pttRef      = useRef(false);
+  const wsRef         = useRef<WebSocket | null>(null);
+  const audioCtxRef   = useRef<AudioContext | null>(null);
+  const sourceRef     = useRef<MediaStreamAudioSourceNode | null>(null);
+  const processorRef  = useRef<ScriptProcessorNode | null>(null);
+  const streamRef     = useRef<MediaStream | null>(null);
+  const bottomRef     = useRef<HTMLDivElement>(null);
+  const mutedRef      = useRef(false);
+  const activeRef     = useRef(false);       // user has enabled mic
+  const reconnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
 
   function addLine(role: 'user' | 'jarvis', text: string) {
     setLines(prev => [...prev.slice(-49), { id: ++_lid, role, text }]);
   }
 
-  // ── Audio capture helpers ──────────────────────────────────────────────────
+  // ── Audio capture ─────────────────────────────────────────────────────────
 
-  const stopAudioCapture = useCallback(() => {
+  const stopAudio = useCallback(() => {
     processorRef.current?.disconnect();
     sourceRef.current?.disconnect();
     processorRef.current = null;
@@ -67,10 +69,13 @@ export default function VoicePage() {
     streamRef.current = null;
   }, []);
 
-  const startAudioCapture = useCallback(async () => {
+  const startAudio = useCallback(async () => {
     if (processorRef.current) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: SAMPLE_RATE, channelCount: 1 }, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { sampleRate: SAMPLE_RATE, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        video: false,
+      });
       streamRef.current = stream;
       const ctx = audioCtxRef.current!;
       const src = ctx.createMediaStreamSource(stream);
@@ -78,6 +83,7 @@ export default function VoicePage() {
       const proc = ctx.createScriptProcessor(Math.floor(SAMPLE_RATE * CHUNK_MS / 1000), 1, 1);
       processorRef.current = proc;
       proc.onaudioprocess = (e) => {
+        if (mutedRef.current) return;
         if (wsRef.current?.readyState !== WebSocket.OPEN) return;
         const float32 = e.inputBuffer.getChannelData(0);
         const int16   = new Int16Array(float32.length);
@@ -93,153 +99,102 @@ export default function VoicePage() {
     }
   }, []);
 
-  // ── WebSocket ──────────────────────────────────────────────────────────────
+  // ── WebSocket (persistent, auto-reconnects) ───────────────────────────────
 
-  const openWs = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+  const connect = useCallback(() => {
+    if (!activeRef.current) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
+
+    setStatus('reconnecting');
     const ws = new WebSocket(VOICE_URL);
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
     ws.onopen = () => {
       setStatus('listening');
-      startAudioCapture();
+      startAudio();
     };
 
     ws.onmessage = (e) => {
       if (typeof e.data === 'string') {
         try {
           const msg = JSON.parse(e.data) as { type?: string; text?: string };
-          if (msg.type === 'transcript' && msg.text) {
-            addLine('user', msg.text);
-            setStatus('processing');
-          }
-          if (msg.type === 'response' && msg.text) {
-            addLine('jarvis', msg.text);
-            setStatus('speaking');
-          }
-          if (msg.type === 'done') {
-            setStatus('standby');
-          }
+          if (msg.type === 'transcript' && msg.text) { addLine('user', msg.text); setStatus('processing'); }
+          if (msg.type === 'response'   && msg.text) { addLine('jarvis', msg.text); setStatus('speaking'); }
+          if (msg.type === 'done')                    { setStatus('listening'); }
         } catch { /* ignore */ }
       } else {
-        // Binary = TTS audio PCM
         playAudioChunk(e.data as ArrayBuffer);
         setStatus('speaking');
       }
     };
 
     ws.onclose = () => {
-      stopAudioCapture();
-      if (!pttRef.current) setStatus('standby');
+      stopAudio();
+      if (!activeRef.current) return;
+      setStatus('reconnecting');
+      reconnTimerRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
     };
 
-    ws.onerror = () => {
-      stopAudioCapture();
-      setStatus('error');
-    };
-  }, [startAudioCapture, stopAudioCapture]);
+    ws.onerror = () => ws.close();
+  }, [startAudio, stopAudio]);
 
-  const closeWs = useCallback(() => {
+  const disconnect = useCallback(() => {
+    activeRef.current = false;
+    if (reconnTimerRef.current) { clearTimeout(reconnTimerRef.current); reconnTimerRef.current = null; }
     wsRef.current?.close();
     wsRef.current = null;
-    stopAudioCapture();
-    setStatus('standby');
-  }, [stopAudioCapture]);
+    stopAudio();
+    setStatus('idle');
+  }, [stopAudio]);
 
-  // ── TTS playback ───────────────────────────────────────────────────────────
+  // ── TTS playback ──────────────────────────────────────────────────────────
 
   function playAudioChunk(buffer: ArrayBuffer) {
     const ctx = audioCtxRef.current;
     if (!ctx) return;
-    const int16 = new Int16Array(buffer);
+    const int16   = new Int16Array(buffer);
     const float32 = new Float32Array(int16.length);
     for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
-    const audioBuffer = ctx.createBuffer(1, float32.length, SAMPLE_RATE);
-    audioBuffer.getChannelData(0).set(float32);
+    const ab  = ctx.createBuffer(1, float32.length, SAMPLE_RATE);
+    ab.getChannelData(0).set(float32);
     const src = ctx.createBufferSource();
-    src.buffer = audioBuffer;
+    src.buffer = ab;
     src.connect(ctx.destination);
     src.start();
-    src.onended = () => setStatus(s => s === 'speaking' ? 'standby' : s);
+    src.onended = () => setStatus(s => s === 'speaking' ? 'listening' : s);
   }
 
-  // ── Wake word via SpeechRecognition ───────────────────────────────────────
-
-  const startWakeWord = useCallback(() => {
-    const SR = (window as typeof window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
-            || (window as typeof window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
-    if (!SR) return;
-    const r = new SR();
-    recogRef.current = r;
-    r.continuous      = true;
-    r.interimResults  = true;
-    r.lang            = 'en-US';
-
-    r.onresult = (e: SpeechRecognitionEvent) => {
-      const heard = Array.from(e.results)
-        .map(res => res[0].transcript.toLowerCase())
-        .join(' ');
-      setTranscript(heard);
-      if (WAKE_PHRASES.some(w => heard.includes(w))) {
-        r.stop();
-        openWs();
-      }
-    };
-
-    r.onend = () => {
-      if (status !== 'listening' && status !== 'processing' && status !== 'speaking') {
-        try { r.start(); } catch { /* already running */ }
-      }
-    };
-
-    try { r.start(); } catch { /* already running */ }
-  }, [openWs, status]);
-
-  // ── Init ──────────────────────────────────────────────────────────────────
+  // ── Init / cleanup ────────────────────────────────────────────────────────
 
   const init = useCallback(async () => {
     try {
+      // probe mic permission
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       stream.getTracks().forEach(t => t.stop());
       setMicAllowed(true);
       audioCtxRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
-      setStatus('standby');
-      startWakeWord();
+      activeRef.current   = true;
+      connect();
     } catch {
       setMicAllowed(false);
       setStatus('error');
     }
-  }, [startWakeWord]);
+  }, [connect]);
 
   useEffect(() => {
     return () => {
-      recogRef.current?.stop();
-      closeWs();
+      disconnect();
       audioCtxRef.current?.close();
     };
-  }, [closeWs]);
+  }, [disconnect]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [lines]);
 
-  // ── Push-to-talk ──────────────────────────────────────────────────────────
-
-  function pttDown() {
-    pttRef.current = true;
-    setPttActive(true);
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
-    openWs();
-  }
-
-  function pttUp() {
-    pttRef.current = false;
-    setPttActive(false);
-    closeWs();
-  }
-
   const orb = STATUS_COLOR[status];
+  const pulsing = status === 'listening' || status === 'speaking';
 
   return (
     <div style={{
@@ -257,8 +212,7 @@ export default function VoicePage() {
 
       {/* Orb */}
       <div style={{ position: 'relative', width: 160, height: 160 }}>
-        {/* pulse rings */}
-        {(status === 'listening' || status === 'speaking') && (
+        {pulsing && (
           <>
             <div style={{ position: 'absolute', inset: -16, borderRadius: '50%', border: `1px solid ${orb}`, opacity: 0.3, animation: 'orbPulse 1.5s ease-out infinite' }} />
             <div style={{ position: 'absolute', inset: -32, borderRadius: '50%', border: `1px solid ${orb}`, opacity: 0.15, animation: 'orbPulse 1.5s ease-out 0.4s infinite' }} />
@@ -271,23 +225,16 @@ export default function VoicePage() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'all 0.4s ease',
         }}>
-          {status === 'speaking'    ? <Volume2 size={36} color="rgba(255,255,255,0.8)" /> :
-           status === 'listening'   ? <Mic size={36} color="rgba(255,255,255,0.9)" /> :
-           status === 'processing'  ? <Mic size={36} color="rgba(251,191,36,0.9)" /> :
-                                      <MicOff size={32} color="rgba(148,163,184,0.5)" />}
+          {status === 'speaking'   ? <Volume2 size={36} color="rgba(255,255,255,0.8)" /> :
+           status === 'listening'  ? <Mic size={36} color={muted ? 'rgba(239,68,68,0.8)' : 'rgba(255,255,255,0.9)'} /> :
+           status === 'processing' ? <Mic size={36} color="rgba(251,191,36,0.9)" /> :
+                                     <MicOff size={32} color="rgba(148,163,184,0.5)" />}
         </div>
       </div>
 
-      {/* Status label */}
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 11, letterSpacing: '0.4em', color: orb, marginBottom: 4 }}>
-          {STATUS_LABEL[status]}
-        </div>
-        {transcript && status === 'standby' && (
-          <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.4)', maxWidth: 300, textAlign: 'center' }}>
-            {transcript.slice(-80)}
-          </div>
-        )}
+      {/* Status */}
+      <div style={{ fontSize: 11, letterSpacing: '0.4em', color: orb }}>
+        {muted && status === 'listening' ? 'MUTED' : STATUS_LABEL[status]}
       </div>
 
       {/* Permission gate */}
@@ -303,7 +250,6 @@ export default function VoicePage() {
             fontSize: 13,
             letterSpacing: '0.2em',
             cursor: 'pointer',
-            transition: 'all 0.2s',
           }}
         >
           ENABLE MICROPHONE
@@ -316,28 +262,41 @@ export default function VoicePage() {
         </div>
       )}
 
-      {/* Push-to-talk fallback */}
-      {micAllowed && (
-        <button
-          onMouseDown={pttDown}
-          onMouseUp={pttUp}
-          onTouchStart={pttDown}
-          onTouchEnd={pttUp}
-          style={{
-            background: pttActive ? 'rgba(0,168,255,0.2)' : 'rgba(0,168,255,0.06)',
-            border: `1px solid ${pttActive ? 'rgba(0,168,255,0.6)' : 'rgba(0,168,255,0.2)'}`,
-            borderRadius: 8,
-            color: pttActive ? 'rgba(0,168,255,1)' : 'rgba(0,168,255,0.5)',
-            padding: '10px 24px',
-            fontSize: 11,
-            letterSpacing: '0.3em',
-            cursor: 'pointer',
-            userSelect: 'none',
-            transition: 'all 0.15s',
-          }}
-        >
-          {pttActive ? '● TRANSMITTING' : 'HOLD TO TALK'}
-        </button>
+      {/* Mute / disconnect controls */}
+      {micAllowed && status !== 'idle' && (
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            onClick={() => setMuted(v => !v)}
+            style={{
+              background: muted ? 'rgba(239,68,68,0.15)' : 'rgba(0,168,255,0.06)',
+              border: `1px solid ${muted ? 'rgba(239,68,68,0.4)' : 'rgba(0,168,255,0.2)'}`,
+              borderRadius: 8,
+              color: muted ? 'rgba(239,68,68,0.9)' : 'rgba(0,168,255,0.5)',
+              padding: '8px 20px',
+              fontSize: 10,
+              letterSpacing: '0.3em',
+              cursor: 'pointer',
+            }}
+          >
+            {muted ? 'UNMUTE' : 'MUTE'}
+          </button>
+
+          <button
+            onClick={disconnect}
+            style={{
+              background: 'rgba(100,0,0,0.1)',
+              border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: 8,
+              color: 'rgba(239,68,68,0.5)',
+              padding: '8px 20px',
+              fontSize: 10,
+              letterSpacing: '0.3em',
+              cursor: 'pointer',
+            }}
+          >
+            DISCONNECT
+          </button>
+        </div>
       )}
 
       {/* Transcript */}
@@ -352,19 +311,11 @@ export default function VoicePage() {
           padding: '12px 0',
         }}>
           {lines.map(l => (
-            <div key={l.id} style={{
-              padding: '4px 16px',
-              display: 'flex',
-              gap: 10,
-              alignItems: 'flex-start',
-            }}>
+            <div key={l.id} style={{ padding: '4px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <span style={{
-                fontSize: 9,
-                letterSpacing: '0.2em',
+                fontSize: 9, letterSpacing: '0.2em',
                 color: l.role === 'jarvis' ? 'rgba(0,168,255,0.6)' : 'rgba(0,255,136,0.5)',
-                minWidth: 44,
-                paddingTop: 2,
-                flexShrink: 0,
+                minWidth: 44, paddingTop: 2, flexShrink: 0,
               }}>
                 {l.role === 'jarvis' ? 'JARVIS' : 'YOU'}
               </span>
@@ -377,10 +328,9 @@ export default function VoicePage() {
         </div>
       )}
 
-      {/* Wake word hint */}
-      {status === 'standby' && (
+      {status === 'listening' && !muted && (
         <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.3)', letterSpacing: '0.2em' }}>
-          SAY &quot;HEY JARVIS&quot; TO ACTIVATE
+          ALWAYS LISTENING · SPEAK NATURALLY
         </div>
       )}
 
