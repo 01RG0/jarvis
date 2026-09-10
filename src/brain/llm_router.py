@@ -81,11 +81,16 @@ def _track_cost(model: str, cost_usd: float, tokens_in: int, tokens_out: int, du
 
 
 def call_llm(
-    messages: list[dict],
+    messages: list[dict] | str,
     model: str = "jarvis-balanced",
     tools: list[dict] | None = None,
     stream: bool = False,
 ) -> dict:
+    # Compatibility: planner calls call_llm(task_type_str, prompt_str)
+    if isinstance(messages, str):
+        task_type, prompt = messages, model
+        model = select_model(task_type)
+        messages = [{"role": "user", "content": prompt}]
     r = get_router()
     kwargs: dict = {"model": model, "messages": messages}
     if tools:

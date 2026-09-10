@@ -82,7 +82,7 @@ _log_subscribers: list[WebSocket] = []
 class _WSLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         msg = {
-            "ts":     self.formatTime(record, "%H:%M:%S.%f")[:-3],
+            "ts":     logging.Formatter().formatTime(record, "%H:%M:%S.%f")[:-3],
             "level":  record.levelname,
             "msg":    self.format(record),
             "logger": record.name,

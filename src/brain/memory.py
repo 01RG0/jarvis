@@ -17,7 +17,10 @@ class JarvisMemory:
         self.memory.add(content, user_id=USER_ID)
 
     def search(self, query: str, limit: int = 5) -> list[str]:
-        raw = self.memory.search(query, user_id=USER_ID, limit=limit)
+        try:
+            raw = self.memory.search(query, filters={'user_id': USER_ID}, limit=limit)
+        except TypeError:
+            raw = self.memory.search(query, user_id=USER_ID, limit=limit)
         if isinstance(raw, dict):
             items = raw.get('results', [])
         else:
