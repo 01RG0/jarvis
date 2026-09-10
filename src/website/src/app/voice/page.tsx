@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Mic, MicOff, Volume2 } from 'lucide-react';
 
-const VOICE_URL = process.env.NEXT_PUBLIC_VOICE_URL || 'wss://localhost/voice-pipeline';
+const VOICE_URL = process.env.NEXT_PUBLIC_VOICE_URL || 'wss://localhost/voice-pipeline/';
 const SAMPLE_RATE = 16000;
 const CHUNK_MS = 100;
 const RECONNECT_DELAY_MS = 3000;

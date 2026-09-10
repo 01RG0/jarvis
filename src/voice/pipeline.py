@@ -22,8 +22,8 @@ async def _run_session() -> None:
     """Run one client session. Called in a loop so the server respawns after each disconnect."""
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.pipeline.pipeline import Pipeline
-    from pipecat.pipeline.runner import PipelineRunner
-    from pipecat.pipeline.task import PipelineParams, PipelineTask
+    from pipecat.pipeline.worker import PipelineParams, PipelineWorker
+    from pipecat.workers.runner import WorkerRunner
     from pipecat.services.groq.llm import GroqLLMService
     from pipecat.processors.aggregators.llm_context import LLMContext
     from pipecat.processors.aggregators.llm_response_universal import (
@@ -74,9 +74,10 @@ async def _run_session() -> None:
         assistant_agg,
     ])
 
-    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
-    runner = PipelineRunner()
-    await runner.run(task)
+    worker = PipelineWorker(pipeline, params=PipelineParams(allow_interruptions=True))
+    runner = WorkerRunner()
+    runner.add_workers(worker)
+    await runner.run()
 
 
 async def run_pipeline() -> None:
