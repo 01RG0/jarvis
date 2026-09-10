@@ -16,6 +16,7 @@ jobs:
           key:      ${{ secrets.AZURE_SSH_KEY }}
           port:     22
           timeout:  120s
+          command_timeout: 30m
           script: |
             set -e
             cd /home/${{ secrets.AZURE_VM_USER }}/jarvis
