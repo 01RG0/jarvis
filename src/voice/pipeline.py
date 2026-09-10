@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 VOICE_WS_PORT = int(os.environ.get('VOICE_WS_PORT', '8765'))
 VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'qwen/qwen3.8-27b')
+SAMPLE_RATE = 16000
 
 JARVIS_SYSTEM = (
     "You are J.A.R.V.I.S. — Just A Rather Very Intelligent System, the personal AI of your user. "
@@ -18,12 +19,27 @@ JARVIS_SYSTEM = (
 )
 
 
+class RawPCMSerializer:
+    """Converts raw Int16 PCM bytes ↔ pipecat audio frames (no RTVI/protobuf framing)."""
+
+    async def serialize(self, frame) -> bytes | None:
+        from pipecat.frames.frames import OutputAudioRawFrame
+        if isinstance(frame, OutputAudioRawFrame):
+            return frame.audio
+        return None
+
+    async def deserialize(self, data: bytes | str):
+        from pipecat.frames.frames import InputAudioRawFrame
+        if isinstance(data, bytes):
+            return InputAudioRawFrame(audio=data, sample_rate=SAMPLE_RATE, num_channels=1)
+        return None
+
+
 async def _run_session() -> None:
-    """Run one client session. Called in a loop so the server respawns after each disconnect."""
     from pipecat.audio.vad.silero import SileroVADAnalyzer
     from pipecat.pipeline.pipeline import Pipeline
-    from pipecat.pipeline.worker import PipelineParams, PipelineWorker
-    from pipecat.workers.runner import WorkerRunner
+    from pipecat.pipeline.runner import PipelineRunner
+    from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.services.groq.llm import GroqLLMService
     from pipecat.processors.aggregators.llm_context import LLMContext
     from pipecat.processors.aggregators.llm_response_universal import (
@@ -47,9 +63,11 @@ async def _run_session() -> None:
         port=VOICE_WS_PORT,
         params=SingleClientWebsocketServerParams(
             audio_out_enabled=True,
+            audio_in_enabled=True,
             vad_enabled=True,
             vad_analyzer=SileroVADAnalyzer(),
             vad_audio_passthrough=True,
+            serializer=RawPCMSerializer(),
         ),
     )
 
@@ -74,14 +92,12 @@ async def _run_session() -> None:
         assistant_agg,
     ])
 
-    worker = PipelineWorker(pipeline, params=PipelineParams(allow_interruptions=True), enable_rtvi=False)
-    runner = WorkerRunner()
-    await runner.add_workers(worker)
-    await runner.run()
+    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
+    runner = PipelineRunner()
+    await runner.run(task)
 
 
 async def run_pipeline() -> None:
-    """Accept connections forever — restart pipeline after each client disconnects."""
     try:
         from pipecat.transports.websocket.server import SingleClientWebsocketServerTransport  # noqa: F401
     except ImportError as e:
