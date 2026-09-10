@@ -1,172 +1,77 @@
-# LLM Providers — Jarvis Reference
+# LLM Providers Reference
 
-All providers are wired into `src/brain/config/litellm_config.yaml` and accessed through
-`src/brain/llm_router.py`. Model IDs were live-tested on 2026-09-10.
-
----
-
-## Provider table
-
-| Provider | Base URL / Backend | Tested aliases | Status | Key env var(s) |
-|----------|--------------------|---------------|--------|----------------|
-| **Alibaba DashScope** | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `jarvis-fast`, `jarvis-balanced`, `jarvis-smart`, `jarvis-vision`, `jarvis-reason`, `jarvis-ali-flash`, `jarvis-ali-max`, `jarvis-ali-think`, `jarvis-ali-coder`, `jarvis-ali-kimi-code`, `jarvis-ali-kimi`, `jarvis-ali-deepseek-pro`, `jarvis-ali-deepseek-flash`, `jarvis-ali-glm`, `jarvis-ali-qwq`, `jarvis-ali-vl`, `jarvis-ali-vl-fast`, `jarvis-ali-omni`, `jarvis-ali-img-gen`, `jarvis-ali-img-wan`, `jarvis-ali-tts`, `jarvis-ali-stt`, `jarvis-ali-embed`, `jarvis-ali-translate` | OK | `ALIBABA_API_KEY`, `ALIBABA_BASE_URL` |
-| **AWS Bedrock** | AWS SDK | `jarvis-coder` | OK 1.5s | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION_NAME` |
-| **Groq** | groq SDK | `jarvis-groq-instant`, `jarvis-groq-fast`, `jarvis-groq-smart`, `jarvis-groq-compound` | OK 0.1–0.5s | `GROQ_API_KEY` |
-| **Google Gemini** | gemini SDK | `jarvis-cheap`, `jarvis-gemini-fast`, `jarvis-gemini-smart` | OK | `GEMINI_API_KEY` |
-| **Cohere** | cohere SDK | `jarvis-cohere-fast`, `jarvis-cohere-smart`, `jarvis-cohere-reason` | OK 0.3–0.4s | `COHERE_API_KEY` |
-| **Mistral** | mistral SDK | `jarvis-mistral-fast`, `jarvis-mistral-smart`, `jarvis-mistral-coder` | OK | `MISTRAL_API_KEY` |
-| **OpenRouter** | `https://openrouter.ai/api/v1` | `jarvis-or-cheap`, `jarvis-or-smart`, `jarvis-or-vision` | OK (paid) | `OPENROUTER_API_KEY` |
-| **TokenHarbor** | `https://tokenharbor.io/api/v1` | `jarvis-th-free` | OK 1.3s | `TOKEN_HARBOR_API_KEY` |
-| **AiHubMix** | `https://aihubmix.com/v1` | `jarvis-aihub-fast`, `jarvis-aihub-balanced` | OK 4–11s | `AIHUBMIX_API_KEY` |
-| **HuggingFace** | HF Inference API | `jarvis-hf-fast`, `jarvis-hf-smart` | OK 1.4s | `HUGGINGFACE_API_KEY` |
-| **AnyAPI** | `ANYAPI_BASE_URL` | `jarvis-anyapi-fast`, `jarvis-anyapi-smart`, `jarvis-anyapi-coder` | OK | `ANYAPI_API_KEY` |
-| **Apertis** | `APERTIS_BASE_URL` | `jarvis-apertis-fast`, `jarvis-apertis-smart`, `jarvis-apertis-balanced` | OK | `APERTIS_API_KEY` |
-| **Atessa** | `ATESSA_BASE_URL` | `jarvis-atessa-fast`, `jarvis-atessa-smart`, `jarvis-atessa-vision`, `jarvis-fast-cc`, `jarvis-smart-cc` | OK | `ATESSA_API_KEY` |
-| **Pooled** | `POOLED_BASE_URL` | `jarvis-pooled-fast`, `jarvis-pooled-smart`, `jarvis-pooled-balanced` | OK | `POOLED_API_KEY` |
-| **Pollinations** | `https://gen.pollinations.ai/v1` | `jarvis-poll-fast`, `jarvis-poll-balanced`, `jarvis-poll-smart`, `jarvis-poll-reason` | OK 2–3s | `POLLINATIONS_API_KEY` |
+All model IDs in this document have been live-tested against their respective APIs.
+The router is configured in `src/brain/config/litellm_config.yaml`.
 
 ---
 
-## All model aliases
+## Overview
 
-### Alibaba DashScope (Maas workspace — 165 models)
+Jarvis uses **LiteLLM Router (SDK mode)** with 16 providers and 65+ named model aliases.
+Routing strategy: latency-based with multi-level fallback chains, 2 retries, 45s timeout.
 
-| Alias | Model ID | Capability |
-|-------|----------|-----------|
-| `jarvis-fast` | `qwen-turbo` | Fast chat, 2.4s |
-| `jarvis-balanced` | `qwen-plus` | Balanced quality/speed |
-| `jarvis-smart` | `qwen-max` | Best Qwen generation, 128K ctx |
-| `jarvis-vision` | `qwen-vl-max` | Multimodal (image + text) |
-| `jarvis-reason` | `qwen3-235b-a22b` | Largest open model, 235B |
-| `jarvis-ali-flash` | `qwen3.8-flash` | Ultra-fast Qwen3.8 |
-| `jarvis-ali-max` | `qwen3.8-max-0902` | Best Qwen3.8 generation |
-| `jarvis-ali-think` | `qwen3.8-2.4t-a95b` | 2.4T parameter reasoning model |
-| `jarvis-ali-coder` | `qwen3-coder-next` | Best open coding model |
-| `jarvis-ali-kimi-code` | `kimi-k2.7-code` | Kimi coding specialist |
-| `jarvis-ali-kimi` | `kimi-k3` | Kimi K3 flagship |
-| `jarvis-ali-deepseek-pro` | `deepseek-v4-pro` | DeepSeek V4 Pro via Alibaba |
-| `jarvis-ali-deepseek-flash` | `deepseek-v4-flash` | DeepSeek V4 Flash |
-| `jarvis-ali-glm` | `ZHIPU/GLM-5.3` | Zhipu GLM-5.3 via Alibaba |
-| `jarvis-ali-qwq` | `qwq-plus` | QwQ reasoning model |
-| `jarvis-ali-vl` | `qwen3-vl-235b-a22b-instruct` | 235B vision-language model |
-| `jarvis-ali-vl-fast` | `qwen3-vl-flash` | Fast vision-language |
-| `jarvis-ali-omni` | `qwen3-omni-flash` | Audio + vision + text |
-| `jarvis-ali-img-gen` | `qwen-image-3.0-pro` | Image generation |
-| `jarvis-ali-img-wan` | `wan2.7-image-pro` | Wan2.7 diffusion image gen |
-| `jarvis-ali-tts` | `qwen3-tts-instruct-flash` | Text-to-speech |
-| `jarvis-ali-stt` | `qwen-audio-3.0-asr-flash` | Speech-to-text / ASR |
-| `jarvis-ali-embed` | `text-embedding-v4` | Text embeddings |
-| `jarvis-ali-translate` | `qwen-mt-turbo` | Machine translation |
-
-### AWS Bedrock
-
-| Alias | Model ID | Notes |
-|-------|----------|-------|
-| `jarvis-coder` | `bedrock/us.anthropic.claude-sonnet-4-6` | Best coding model |
-
-### Groq (new lineup — GPT-OSS series)
-
-| Alias | Model ID | Notes |
-|-------|----------|-------|
-| `jarvis-groq-instant` | `groq/openai/gpt-oss-20b` | 0.1s TTFT, voice-optimized |
-| `jarvis-groq-fast` | `groq/qwen/qwen3.8-27b` | Fast + quality |
-| `jarvis-groq-smart` | `groq/openai/gpt-oss-120b` | Largest Groq model |
-| `jarvis-groq-compound` | `groq/groq/compound-mini` | Multi-step reasoning |
-
-### Google Gemini
-
-| Alias | Model ID | Notes |
-|-------|----------|-------|
-| `jarvis-cheap` | `gemini/gemini-2.5-flash` | Free tier |
-| `jarvis-gemini-fast` | `gemini/gemini-2.5-flash` | Same; named for fallbacks |
-| `jarvis-gemini-smart` | `gemini/gemini-2.5-flash` | Flash is free; Pro not on free key |
-
-### Cohere
-
-| Alias | Model ID | Notes |
-|-------|----------|-------|
-| `jarvis-cohere-fast` | `cohere/command-r-08-2024` | 0.3s, long-context RAG |
-| `jarvis-cohere-smart` | `cohere/command-r-plus-08-2024` | Best Command R+ |
-| `jarvis-cohere-reason` | `cohere/command-a-03-2025` | Command-A reasoning |
-
-### Mistral
-
-| Alias | Model ID | Notes |
-|-------|----------|-------|
-| `jarvis-mistral-fast` | `mistral/mistral-small-latest` | |
-| `jarvis-mistral-smart` | `mistral/mistral-large-latest` | |
-| `jarvis-mistral-coder` | `mistral/codestral-latest` | Best code completion |
-
-### OpenRouter
-
-| Alias | Model ID | Notes |
-|-------|----------|-------|
-| `jarvis-or-cheap` | `openrouter/google/gemini-flash-1.5-8b` | Cheap fallback |
-| `jarvis-or-smart` | `openrouter/anthropic/claude-opus-5` | Best via OpenRouter |
-| `jarvis-or-vision` | `openrouter/google/gemini-2.5-pro` | Vision via OpenRouter |
-
-### Other providers
-
-| Alias | Model | Provider |
-|-------|-------|----------|
-| `jarvis-th-free` | `deepseek-v4.1-flash:free` | TokenHarbor |
-| `jarvis-aihub-fast` | `gpt-4.1-free` | AiHubMix |
-| `jarvis-aihub-balanced` | `gemini-3.7-flash-free` | AiHubMix |
-| `jarvis-hf-fast` | `HuggingFaceH4/zephyr-7b-beta` | HuggingFace |
-| `jarvis-hf-smart` | `meta-llama/Llama-3.3-70B-Instruct` | HuggingFace |
-| `jarvis-anyapi-fast` | `nvidia/nemotron-3-nano-30b-a3b:free` | AnyAPI |
-| `jarvis-anyapi-smart` | `nvidia/nemotron-ultra-550b:free` | AnyAPI |
-| `jarvis-anyapi-coder` | `qwen/qwen3-coder:free` | AnyAPI |
-| `jarvis-apertis-fast` | `deepseek-v4.1-flash` | Apertis |
-| `jarvis-apertis-smart` | `claude-fable-5.1` | Apertis |
-| `jarvis-apertis-balanced` | `qwen3.8-27b` | Apertis |
-| `jarvis-atessa-fast` / `jarvis-fast-cc` | `claude-haiku-4-5-strong` | Atessa |
-| `jarvis-atessa-smart` / `jarvis-smart-cc` | `claude-opus-5-strong` | Atessa |
-| `jarvis-atessa-vision` | `gemini-3.1-flash-image` | Atessa |
-| `jarvis-pooled-fast` | `kimi-k2.5-fallback` | Pooled |
-| `jarvis-pooled-smart` | `deepseek-v4-pro-official` | Pooled |
-| `jarvis-pooled-balanced` | `deepseek-v4-flash-official` | Pooled |
-| `jarvis-poll-fast` | `google/gemini-2.5-flash-lite` | Pollinations |
-| `jarvis-poll-balanced` | `meta/llama-4-maverick` | Pollinations |
-| `jarvis-poll-smart` | `deepseek/deepseek-v4-pro` | Pollinations |
-| `jarvis-poll-reason` | `deepseek/deepseek-v4-flash` | Pollinations |
+Every call goes through `src/brain/llm_router.py` → `call_llm()` / `call_llm_async()`.
+Never import `litellm.completion` directly — always use the router functions.
 
 ---
 
-## Task routing
+## Provider Table
 
-`select_model(task_type)` in `src/brain/llm_router.py` maps task types to the best alias.
+| Provider | Alias Prefix | Confirmed Models | Env Var | Notes |
+|----------|-------------|-----------------|---------|-------|
+| Alibaba DashScope | `jarvis-fast`, `jarvis-balanced`, `jarvis-smart`, `jarvis-reason`, `jarvis-vision`, `jarvis-ali-*` | qwen-turbo, qwen-plus, qwen-max, qwen3-235b-a22b, qwen3.8-max-0902, qwen3.8-2.4t-a95b, qwen3-coder-next, kimi-k2.7-code, kimi-k3, deepseek-v4-pro/flash, GLM-5.3, qwq-plus, qwen3-vl-235b, qwen3-vl-flash, qwen3-omni-flash, qwen-image-3.0-pro, wan2.7-image-pro, qwen3-tts-instruct-flash, qwen-audio-3.0-asr-flash, text-embedding-v4, qwen-mt-turbo | `ALIBABA_API_KEY` + `ALIBABA_BASE_URL` | 165 total models on DashScope Maas. Base URL: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` |
+| AWS Bedrock | `jarvis-coder` | `bedrock/us.anthropic.claude-sonnet-4-6` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION_NAME` | Best model for code generation. Tested 1.5s TTFT. |
+| Groq | `jarvis-groq-*` | `groq/openai/gpt-oss-20b` (0.1s!), `groq/qwen/qwen3.8-27b`, `groq/openai/gpt-oss-120b`, `groq/groq/compound-mini` | `GROQ_API_KEY` | Fastest inference available. Old Llama models decommissioned Sep 2025. |
+| Google Gemini | `jarvis-cheap`, `jarvis-gemini-fast`, `jarvis-gemini-smart` | `gemini/gemini-2.5-flash` | `GEMINI_API_KEY` | Free tier, generous quota. Pro tier returns 404 on free key. |
+| Cohere | `jarvis-cohere-*` | `command-r-08-2024`, `command-r-plus-08-2024`, `command-a-03-2025` | `COHERE_API_KEY` | 0.3–0.4s TTFT. Best for long-context RAG. `command-a-03-2025` has reasoning mode. |
+| Mistral | `jarvis-mistral-*` | `mistral-small-latest`, `mistral-large-latest`, `codestral-latest` | `MISTRAL_API_KEY` | Codestral tested OK 0.2s. Free small tier has rate limits. |
+| OpenRouter | `jarvis-or-*` | `google/gemini-flash-1.5-8b`, `anthropic/claude-opus-5`, `google/gemini-2.5-pro` | `OPENROUTER_API_KEY` | Free tier removed (all `:free` models returned no endpoints). Paid routes confirmed working. |
+| TokenHarbor | `jarvis-th-free` | `deepseek-v4.1-flash:free` | `TOKEN_HARBOR_API_KEY` + `TOKEN_HARBOR_BASE_URL` | Free DeepSeek. Tested 1.3s. `https://tokenharbor.io/api/v1` |
+| AiHubMix | `jarvis-aihub-*` | `gpt-4.1-free`, `gemini-3.7-flash-free` | `AIHUBMIX_API_KEY` + `AIHUBMIX_BASE_URL` | 415 models. Free tier confirmed. Tested 4.3s / 11.2s. `https://aihubmix.com/v1` |
+| HuggingFace | `jarvis-hf-*` | `HuggingFaceH4/zephyr-7b-beta`, `meta-llama/Llama-3.3-70B-Instruct` | `HUGGINGFACE_API_KEY` | Serverless inference API. 70B tested OK 1.4s. `Llama-3.2-3B` returns bad request — use zephyr. |
+| AnyAPI | `jarvis-anyapi-*` | `nvidia/nemotron-3-nano-30b-a3b:free`, `nvidia/nemotron-ultra-550b:free`, `qwen/qwen3-coder:free` | `ANYAPI_API_KEY` + `ANYAPI_BASE_URL` | 100+ free models. Tested OK. |
+| Apertis | `jarvis-apertis-*` | `deepseek-v4.1-flash`, `claude-fable-5.1`, `qwen3.8-27b` | `APERTIS_API_KEY` + `APERTIS_BASE_URL` | All three tested OK. |
+| Atessa | `jarvis-atessa-*`, `jarvis-fast-cc`, `jarvis-smart-cc` | `claude-haiku-4-5-strong`, `claude-opus-5-strong`, `gemini-3.1-flash-image` | `ATESSA_API_KEY` + `ATESSA_BASE_URL` | Replaces CodeCraft (which stopped returning responses). Alias names preserved so fallback chains unchanged. |
+| Pooled | `jarvis-pooled-*` | `kimi-k2.5-fallback`, `deepseek-v4-pro-official`, `deepseek-v4-flash-official` | `POOLED_API_KEY` + `POOLED_BASE_URL` | All tested OK. |
+| Pollinations | `jarvis-poll-*` | `google/gemini-2.5-flash-lite`, `meta/llama-4-maverick`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash` | `POLLINATIONS_API_KEY` | Aggregator at `https://gen.pollinations.ai/v1`. poll-smart 2.7s, poll-reason 3s. |
 
-| Task type | Alias | Model |
-|-----------|-------|-------|
-| `voice`, `fast`, `free` | `jarvis-groq-instant` | GPT-OSS-20B (0.1s) |
-| `chat`, `balanced` | `jarvis-balanced` | Qwen Plus |
-| `smart` | `jarvis-ali-max` | Qwen3.8-Max |
-| `long` | `jarvis-smart` | Qwen Max (128K) |
-| `code` | `jarvis-ali-coder` | qwen3-coder-next |
-| `kimi-code` | `jarvis-ali-kimi-code` | kimi-k2.7-code |
-| `reason`, `think` | `jarvis-ali-think` | qwen3.8-2.4T |
-| `qwq` | `jarvis-ali-qwq` | QwQ-Plus |
-| `research` | `jarvis-ali-deepseek-pro` | DeepSeek V4 Pro |
-| `search` | `jarvis-gemini-smart` | Gemini 2.5 Flash |
-| `vision` | `jarvis-ali-vl` | Qwen3-VL-235B |
-| `vision-fast` | `jarvis-ali-vl-fast` | Qwen3-VL-Flash |
-| `omni` | `jarvis-ali-omni` | Qwen3-Omni-Flash |
-| `image-gen` | `jarvis-ali-img-gen` | Qwen-Image-3.0-Pro |
-| `image-wan` | `jarvis-ali-img-wan` | Wan2.7-image-pro |
-| `tts` | `jarvis-ali-tts` | Qwen3-TTS-Instruct-Flash |
-| `stt` | `jarvis-ali-stt` | Qwen-Audio-3.0-ASR-Flash |
+---
+
+## Task-Type Routing
+
+`select_model(task_type, has_image=False)` in `src/brain/llm_router.py`:
+
+| Task type | Primary alias | Underlying model |
+|-----------|--------------|-----------------|
+| `voice` | `jarvis-groq-instant` | gpt-oss-20b (Groq) — 0.1s |
+| `fast` | `jarvis-groq-instant` | gpt-oss-20b (Groq) |
+| `chat` / `balanced` | `jarvis-balanced` | qwen-plus (Alibaba) |
+| `smart` | `jarvis-ali-max` | qwen3.8-max-0902 (Alibaba) |
+| `long` | `jarvis-smart` | qwen-max 128K (Alibaba) |
+| `code` | `jarvis-ali-coder` | qwen3-coder-next (Alibaba) |
+| `kimi-code` | `jarvis-ali-kimi-code` | kimi-k2.7-code (Alibaba) |
+| `reason` / `think` | `jarvis-ali-think` | qwen3.8-2.4t-a95b — 2.4T params |
+| `qwq` | `jarvis-ali-qwq` | qwq-plus (Alibaba) |
+| `research` | `jarvis-ali-deepseek-pro` | deepseek-v4-pro (Alibaba) |
+| `search` | `jarvis-gemini-smart` | gemini-2.5-flash (good retrieval) |
+| `vision` | `jarvis-ali-vl` | qwen3-vl-235b-a22b (Alibaba) |
+| `vision-fast` | `jarvis-ali-vl-fast` | qwen3-vl-flash (Alibaba) |
+| `omni` | `jarvis-ali-omni` | qwen3-omni-flash (audio+vision+text) |
+| `image-gen` | `jarvis-ali-img-gen` | qwen-image-3.0-pro (Alibaba) |
+| `image-wan` | `jarvis-ali-img-wan` | wan2.7-image-pro (Alibaba diffusion) |
+| `tts` | `jarvis-ali-tts` | qwen3-tts-instruct-flash |
+| `stt` | `jarvis-ali-stt` | qwen-audio-3.0-asr-flash |
 | `embed` | `jarvis-ali-embed` | text-embedding-v4 |
-| `translate` | `jarvis-ali-translate` | Qwen-MT-Turbo |
-| `bulk`, `cheap` | `jarvis-cheap` | Gemini 2.5 Flash (free) |
-
-Pass `has_image=True` to force `jarvis-ali-vl` regardless of task_type.
+| `translate` | `jarvis-ali-translate` | qwen-mt-turbo |
+| `bulk` / `cheap` | `jarvis-cheap` | gemini-2.5-flash (free tier) |
+| `free` | `jarvis-groq-instant` | gpt-oss-20b (Groq free) |
+| _(has_image=True)_ | `jarvis-ali-vl` | qwen3-vl-235b-a22b |
 
 ---
 
-## Fallback chains
+## Fallback Chains
 
-Router falls back in order if a model fails or times out (`allowed_fails: 2`, `cooldown_time: 60s`).
+Defined in `router_settings.fallbacks` in the config YAML. When the primary alias fails, LiteLLM automatically tries the fallback list in order.
 
 | Primary | Fallback chain |
 |---------|---------------|
@@ -180,41 +85,51 @@ Router falls back in order if a model fails or times out (`allowed_fails: 2`, `c
 
 ---
 
-## Provider admin CLI
+## Managing Providers
 
-`src/brain/tools/provider_admin.py` — manage providers from the command line.
+The provider admin CLI is at `src/brain/tools/provider_admin.py`.
+Run from repo root (not from inside `src/brain/`) to avoid import conflicts with `tools/calendar.py`.
 
 ```bash
-# List all aliases with key-set status
+# List all configured aliases and whether their key is set
 python src/brain/tools/provider_admin.py list
 
-# Parallel ping all models (async, 15s timeout each)
+# Parallel ping test — all aliases simultaneously (~40s instead of ~11min sequential)
 python src/brain/tools/provider_admin.py test
 
-# Ping a single alias
-python src/brain/tools/provider_admin.py test jarvis-fast
+# Test one alias
+python src/brain/tools/provider_admin.py test jarvis-groq-instant
 
-# Discover available models from an OpenAI-compatible endpoint
-python src/brain/tools/provider_admin.py discover https://api.example.com/v1 MY_KEY_ENV
+# Discover what models a new OpenAI-compatible endpoint offers
+python src/brain/tools/provider_admin.py discover https://api.example.com/v1 MY_KEY_ENV_VAR
 
-# Add a new alias
+# Add a new alias (api_base_env is optional for native LiteLLM providers)
 python src/brain/tools/provider_admin.py add my-alias openai/model-id MY_KEY_ENV [MY_BASE_ENV]
 
-# Remove an alias (also removes it from all fallback chains)
+# Remove an alias (also removes it from fallback chains)
 python src/brain/tools/provider_admin.py remove my-alias
 ```
 
-The same test endpoint is exposed over HTTP: `POST /api/providers/test/{alias}`.
+### Adding a new OpenAI-compatible provider
 
----
+1. Add key to `.env`: `MYPROVIDER_API_KEY=sk-...` and `MYPROVIDER_BASE_URL=https://...`
+2. Add to `.env.example` with empty value
+3. Run: `python src/brain/tools/provider_admin.py add jarvis-myprovider openai/model-id MYPROVIDER_API_KEY MYPROVIDER_BASE_URL`
+4. Test: `python src/brain/tools/provider_admin.py test jarvis-myprovider`
+5. Optionally add to a fallback chain in `litellm_config.yaml`
 
-## Known issues / decisions
+### Removed providers (and why)
 
-- **Cerebras removed** — all model IDs failed + payment required (no free tier).
-- **CodeCraft removed** — API returns empty body on all completions; aliases `jarvis-fast-cc` / `jarvis-smart-cc` now point to Atessa as drop-in replacement.
-- **OpenRouter free tier gone** — all `:free` models either "no endpoints" or "unavailable"; replaced with paid `gemini-flash-1.5-8b` as `jarvis-or-cheap`.
-- **Gemini Pro not on free key** — `gemini-2.5-pro` returns 404; all Gemini aliases use `gemini-2.5-flash`.
-- **Groq full model refresh** — old Llama lineup decommissioned; replaced with GPT-OSS-20B/120B, Qwen3.8-27B, Compound-Mini.
-- **Cohere IDs** — `command-r-plus-08-2024` and `command-a-03-2025` (not future-dated variants).
-- **Windows encoding** — provider_admin.py uses `[OK]`/`[!!]` instead of Unicode symbols to avoid cp1252 issues.
-- **`calendar.py` stdlib clash** — run provider_admin.py from repo root or with adjusted `sys.path` to avoid `tools/calendar.py` shadowing stdlib.
+| Provider | Why removed |
+|----------|------------|
+| OpenAI | No API key |
+| Anthropic | No API key (use via Atessa/OpenRouter) |
+| xAI | No API key |
+| DeepSeek | No API key (use via Alibaba, Pollinations, TokenHarbor) |
+| Perplexity | No API key |
+| Together AI | No API key |
+| Cloudflare | No API key |
+| Zhipu | No API key (GLM available via Alibaba) |
+| NVIDIA NIM | No API key (Nemotron available via AnyAPI free) |
+| Fireworks AI | No API key |
+| Cerebras | API returns "Payment required" on all models |
