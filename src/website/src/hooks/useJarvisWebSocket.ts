@@ -50,27 +50,31 @@ export function useJarvisWebSocket(options?: UseJarvisWebSocketOptions) {
 
   const connect = useCallback(() => {
     const url = `${GW_URL}/ws?token=${GW_TOKEN}`;
+    console.log('[jarvis] connecting to', url);
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log('[jarvis] WebSocket connected');
       setConnected(true);
       setOrbState('idle');
       setServerStatus(s => ({ ...s, connected: true }));
       retriesRef.current = 0;
     };
 
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+      console.warn('[jarvis] WebSocket closed', e.code, e.reason);
       setConnected(false);
       setOrbState('error');
       setServerStatus(s => ({ ...s, connected: false }));
       if (retriesRef.current < 5) {
         retriesRef.current++;
+        console.log(`[jarvis] retry ${retriesRef.current}/5 in ${2000 * retriesRef.current}ms`);
         setTimeout(connect, 2000 * retriesRef.current);
       }
     };
 
-    ws.onerror = () => setOrbState('error');
+    ws.onerror = (e) => { console.error('[jarvis] WebSocket error', e); setOrbState('error'); };
 
     ws.onmessage = (e) => {
       try {

@@ -28,7 +28,8 @@ const levelColor: Record<LogLine['level'], string> = {
   DEBUG: 'rgba(148,163,184,0.5)',
 };
 
-const WS_URL = 'ws://localhost:8001/ws/logs';
+const BRAIN_WS = (process.env.NEXT_PUBLIC_BRAIN_URL || 'http://localhost:8001').replace(/^http/, 'ws');
+const WS_URL = `${BRAIN_WS}/ws/logs`;
 
 export default function LogsWidget({ onClose }: { onClose: () => void }) {
   const [lines, setLines] = useState<LogLine[]>([

@@ -24,7 +24,8 @@ function toRows(s: Stats): SysStat[] {
   ];
 }
 
-const WS_URL = 'ws://localhost:8001/ws/stats';
+const BRAIN_WS = (process.env.NEXT_PUBLIC_BRAIN_URL || 'http://localhost:8001').replace(/^http/, 'ws');
+const WS_URL = `${BRAIN_WS}/ws/stats`;
 
 export default function SysMonWidget({ onClose }: { onClose: () => void }) {
   const [stats, setStats] = useState<SysStat[] | null>(null);

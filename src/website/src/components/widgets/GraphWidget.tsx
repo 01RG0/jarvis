@@ -12,7 +12,8 @@ const SERIES_DEFS: Omit<Series, 'values'>[] = [
 ];
 
 const MAX_POINTS = 60;
-const WS_URL = 'ws://localhost:8001/ws/stats';
+const BRAIN_WS = (process.env.NEXT_PUBLIC_BRAIN_URL || 'http://localhost:8001').replace(/^http/, 'ws');
+const WS_URL = `${BRAIN_WS}/ws/stats`;
 
 export default function GraphWidget({ onClose }: { onClose: () => void }) {
   const [series, setSeries] = useState<Series[]>(() =>

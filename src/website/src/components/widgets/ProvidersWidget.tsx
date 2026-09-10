@@ -40,7 +40,7 @@ interface TestResult {
   model_used?: string
 }
 
-const BRAIN = 'http://localhost:8001'
+const BRAIN = process.env.NEXT_PUBLIC_BRAIN_URL || 'http://localhost:8001'
 
 const PROVIDER_COLORS: Record<string, string> = {
   groq:        '#f97316',
