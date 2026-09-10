@@ -94,7 +94,8 @@ export default function VoicePage() {
       };
       src.connect(proc);
       proc.connect(ctx.destination);
-    } catch {
+    } catch (err) {
+      console.error('[voice] mic/audio init failed:', err);
       setStatus('error');
     }
   }, []);
@@ -106,6 +107,7 @@ export default function VoicePage() {
     if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
     setStatus('reconnecting');
+    console.log('[voice] connecting to', VOICE_URL);
     const ws = new WebSocket(VOICE_URL);
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
@@ -136,7 +138,7 @@ export default function VoicePage() {
       reconnTimerRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
     };
 
-    ws.onerror = () => ws.close();
+    ws.onerror = (e) => { console.error('[voice] WS error', e); ws.close(); };
   }, [startAudio, stopAudio]);
 
   const disconnect = useCallback(() => {
@@ -176,7 +178,8 @@ export default function VoicePage() {
       audioCtxRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
       activeRef.current   = true;
       connect();
-    } catch {
+    } catch (err) {
+      console.error('[voice] getUserMedia failed:', err);
       setMicAllowed(false);
       setStatus('error');
     }
