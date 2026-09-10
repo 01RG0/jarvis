@@ -40,6 +40,11 @@ echo "==> Building website..."
 cd "$JARVIS_DIR/src/website"
 npm install --legacy-peer-deps --silent
 npm run build
+# standalone mode: copy static assets so nginx can serve them directly
+cp -r .next/static .next/standalone/.next/static
+# allow nginx (www-data) to read static files
+chmod -R o+rX .next/standalone/.next/static/
+chmod o+x "$JARVIS_DIR" /home/rootuser
 
 echo "==> Restarting website service..."
 sudo systemctl restart jarvis-website
