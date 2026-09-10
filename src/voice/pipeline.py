@@ -77,7 +77,7 @@ async def run_pipeline() -> None:
         assistant_agg,
     ])
 
-    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
+    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True, idle_timeout=86400))
     runner = PipelineRunner()
     logger.info('Voice pipeline starting on ws://0.0.0.0:%d', VOICE_WS_PORT)
     await runner.run(task)
