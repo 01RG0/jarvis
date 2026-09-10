@@ -20,7 +20,8 @@ import GraphWidget   from '@/components/widgets/GraphWidget';
 import WebViewWidget from '@/components/widgets/WebViewWidget';
 import LogsWidget      from '@/components/widgets/LogsWidget';
 import MediaWidget     from '@/components/widgets/MediaWidget';
-import ProvidersWidget from '@/components/widgets/ProvidersWidget';
+import ProvidersWidget   from '@/components/widgets/ProvidersWidget';
+import SelfUpdateWidget from '@/components/widgets/SelfUpdateWidget';
 
 const OrbRing = dynamic(() => import('@/components/OrbRing'), { ssr: false });
 
@@ -398,7 +399,8 @@ export default function HomePage() {
           w.type === 'webview' ? <WebViewWidget onClose={() => widgets.despawn(w.instanceId)} /> :
           w.type === 'logs'    ? <LogsWidget    onClose={() => widgets.despawn(w.instanceId)} /> :
           w.type === 'media'     ? <MediaWidget     onClose={() => widgets.despawn(w.instanceId)} /> :
-          w.type === 'providers' ? <ProvidersWidget /> :
+          w.type === 'providers'   ? <ProvidersWidget /> :
+          w.type === 'selfupdate'  ? <SelfUpdateWidget /> :
           null;
         if (!inner) return null;
         return (

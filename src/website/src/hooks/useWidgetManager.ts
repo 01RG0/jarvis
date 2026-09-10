@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 
 export type WidgetId = 'chat' | 'stats' | 'memory' | 'settings';
-export type SpawnableType = 'clock' | 'notes' | 'sysmon' | 'graph' | 'webview' | 'logs' | 'media' | 'providers';
+export type SpawnableType = 'clock' | 'notes' | 'sysmon' | 'graph' | 'webview' | 'logs' | 'media' | 'providers' | 'selfupdate';
 
 export interface SpawnedWidget {
   instanceId: string;

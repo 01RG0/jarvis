@@ -156,6 +156,8 @@
 
 **Done criteria:** See phase 8 plan.
 
+**Done.**
+
 ---
 
 ## Phase 9 — LLM Provider Management (NEW)
@@ -177,6 +179,8 @@
 
 **See:** `docs/research/llm-providers.md`
 
+**Done.**
+
 ---
 
 ## Phase 10 — Smart Context (NEW)
@@ -194,6 +198,8 @@
 
 **Estimated effort:** 1 week
 
+**Done.**
+
 ---
 
 ## Phase 11 — Smart Home (NEW)
@@ -209,6 +215,8 @@
 **New dependencies:** `httpx`
 
 **Estimated effort:** 3 days
+
+**Done.**
 
 ---
 
@@ -227,6 +235,8 @@
 
 **Estimated effort:** 2 weeks
 
+**Done.**
+
 ---
 
 ## Phase 13 — Self-Improvement (Ongoing)
@@ -241,6 +251,8 @@
 - Weekly self-report: Telegram summary of what JARVIS learned
 
 **Estimated effort:** Ongoing, incremental
+
+**Done.**
 
 ---
 
