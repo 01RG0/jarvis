@@ -31,6 +31,7 @@ sudo systemctl restart jarvis-sidecar
 echo "==> Installing gateway deps..."
 cd "$JARVIS_DIR/src/gateway"
 npm ci --silent
+npm run build
 
 echo "==> Restarting gateway service..."
 sudo systemctl restart jarvis-gateway
@@ -44,9 +45,10 @@ npm run build
 cp -r .next/static .next/standalone/.next/static
 # allow nginx (www-data) to read static files
 chmod -R o+rX .next/standalone/.next/static/
-# grant www-data traverse access using ACLs (not world-executable)
-setfacl -m u:www-data:x /home/rootuser 2>/dev/null || chmod o+x /home/rootuser
-setfacl -m u:www-data:x "$JARVIS_DIR" 2>/dev/null || chmod o+x "$JARVIS_DIR"
+# grant www-data traverse access using ACLs
+command -v setfacl >/dev/null 2>&1 || { echo 'ERROR: setfacl not found; run: apt install acl' >&2; exit 1; }
+setfacl -m u:www-data:x /home/rootuser
+setfacl -m u:www-data:x "$JARVIS_DIR"
 
 echo "==> Restarting website service..."
 sudo systemctl restart jarvis-website
