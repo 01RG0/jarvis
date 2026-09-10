@@ -7,6 +7,31 @@ from langgraph.graph import StateGraph, END
 ACTION_KEYWORDS = {"deploy", "create", "build", "write", "fix", "search", "read", "find", "run", "execute"}
 
 
+_WIDGET_PATTERNS: list[tuple[str, str, str]] = [
+    ("browser",  "show",   r"\b(show|open)\b.{0,20}\bbrowser\b"),
+    ("browser",  "show",   r"\bshow me.{0,30}\bin (a |the )?widget\b"),
+    ("logs",     "show",   r"\b(show|open)\b.{0,20}\blogs?\b"),
+    ("stats",    "show",   r"\b(show|open)\b.{0,20}\b(stats?|system|monitor)\b"),
+    ("memory",   "show",   r"\b(show|open)\b.{0,20}\bmemory\b"),
+    ("settings", "show",   r"\b(show|open)\b.{0,20}\bsettings?\b"),
+    ("providers","show",   r"\b(show|open)\b.{0,20}\bproviders?\b"),
+    ("chat",     "show",   r"\b(show|open)\b.{0,20}\bchat\b"),
+    ("browser",  "hide",   r"\b(hide|close)\b.{0,20}\bbrowser\b"),
+    ("logs",     "hide",   r"\b(hide|close)\b.{0,20}\blogs?\b"),
+    ("stats",    "hide",   r"\b(hide|close)\b.{0,20}\b(stats?|system|monitor)\b"),
+    ("memory",   "hide",   r"\b(hide|close)\b.{0,20}\bmemory\b"),
+    ("settings", "hide",   r"\b(hide|close)\b.{0,20}\bsettings?\b"),
+]
+
+
+def _detect_widget_cmd(text: str) -> dict | None:
+    lower = text.lower()
+    for widget, action, pattern in _WIDGET_PATTERNS:
+        if re.search(pattern, lower):
+            return {"action": action, "widget": widget}
+    return None
+
+
 class TaskState(TypedDict):
     task_id: str
     input: str
@@ -21,6 +46,7 @@ class TaskState(TypedDict):
     memory_context: str
     skill_context: str
     tool_result: str
+    widget_cmd: dict
 
 
 def route_node(state: TaskState) -> TaskState:
@@ -46,8 +72,10 @@ def memory_node(state: TaskState) -> TaskState:
 def tool_node(state: TaskState) -> TaskState:
     """Run the best matching Jarvis tool for this task. If none found, auto-forge one."""
     try:
-        from tool_registry import run_for_task
-        result = run_for_task(state['input'])
+        from tool_registry import find_for_task
+        from tool_fallbacks import run_with_fallback
+        matched = find_for_task(state['input'])
+        result = run_with_fallback(matched.name, query=state['input'], input=state['input']) if matched else None
         if result and result.success:
             return {**state, 'tool_result': f"[{result.tool_name}]: {result.output}"}
         if result and not result.success:
@@ -183,6 +211,11 @@ def retry_node(state: TaskState) -> TaskState:
     return {**state, "attempts": new_attempts, "error": ""}
 
 
+def widget_node(state: TaskState) -> TaskState:
+    cmd = _detect_widget_cmd(state["input"])
+    return {**state, "widget_cmd": cmd or {}}
+
+
 def output_node(state: TaskState) -> TaskState:
     return state
 
@@ -230,7 +263,7 @@ def _route_after_verify(state: TaskState) -> str:
 
 def build_graph() -> StateGraph:
     g = StateGraph(TaskState)
-    for fn in (route_node, fast_node, plan_node, parallel_agents_node, execute_node, verify_node, retry_node, output_node):
+    for fn in (route_node, fast_node, plan_node, parallel_agents_node, execute_node, verify_node, retry_node, widget_node, output_node):
         g.add_node(fn.__name__, fn)
     g.add_node('memory_node', memory_node)
     g.add_node('skill_node', skill_node)
@@ -241,12 +274,13 @@ def build_graph() -> StateGraph:
     g.add_edge('memory_node', 'skill_node')
     g.add_edge('skill_node', 'tool_node')
     g.add_edge('tool_node', 'plan_node')
-    g.add_edge("fast_node", "save_memory_node")
+    g.add_edge("fast_node", "widget_node")
     g.add_edge("plan_node", "parallel_agents_node")
     g.add_edge("parallel_agents_node", "execute_node")
     g.add_edge("execute_node", "verify_node")
-    g.add_conditional_edges("verify_node", _route_after_verify, {"retry_node": "retry_node", "output_node": "output_node"})
+    g.add_conditional_edges("verify_node", _route_after_verify, {"retry_node": "retry_node", "output_node": "widget_node"})
     g.add_edge("retry_node", "execute_node")
+    g.add_edge("widget_node", "output_node")
     g.add_edge("output_node", "save_memory_node")
     g.add_edge('save_memory_node', END)
     return g

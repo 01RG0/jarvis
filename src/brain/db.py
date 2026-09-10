@@ -140,6 +140,17 @@ def init_db() -> str:
                 disk REAL
             );
             CREATE INDEX IF NOT EXISTS idx_snapshots_ts ON system_snapshots(ts DESC);
+
+            CREATE TABLE IF NOT EXISTS api_health (
+                tool_name            TEXT NOT NULL,
+                provider             TEXT NOT NULL DEFAULT '',
+                status               TEXT NOT NULL DEFAULT 'unknown',
+                last_checked         INTEGER,
+                last_error           TEXT,
+                consecutive_failures INTEGER DEFAULT 0,
+                last_success_at      INTEGER,
+                PRIMARY KEY (tool_name, provider)
+            );
         """)
     return DB_PATH
 

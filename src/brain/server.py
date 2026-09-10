@@ -64,6 +64,8 @@ async def _collect_stats() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    from api_health import init_health_table
+    init_health_table()
     start_flush_loop()
     asyncio.create_task(_collect_stats())
     from scheduler import get_scheduler
@@ -120,6 +122,7 @@ class TaskResponse(BaseModel):
     model_used: str
     cost_usd: float
     duration_ms: int
+    widget_cmd: dict | None = None
 
 
 class HealthResponse(BaseModel):
@@ -233,6 +236,18 @@ async def forge_tool_endpoint(body: ForgeToolRequest) -> dict:
 async def list_tools_endpoint() -> list:
     from tool_registry import list_tools
     return list_tools()
+
+
+@app.get("/api/health/apis")
+async def api_health_endpoint() -> dict:
+    from api_health import get_health
+    return get_health()
+
+
+@app.post("/api/health/probe")
+async def api_health_probe() -> dict:
+    from api_health import probe_all
+    return probe_all()
 
 
 @app.get("/api/providers")
