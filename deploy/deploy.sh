@@ -53,5 +53,30 @@ setfacl -m u:www-data:x "$JARVIS_DIR"
 echo "==> Restarting website service..."
 sudo systemctl restart jarvis-website
 
+# ── nginx config ─────────────────────────────────────────────────────────────
+echo "==> Updating nginx config..."
+DOMAIN=$(grep NEXT_PUBLIC_GATEWAY_URL "$JARVIS_DIR/src/website/.env.local" 2>/dev/null \
+    | grep -oP '(?<=://)[^/]+' | head -1)
+if [ -z "$DOMAIN" ]; then
+    DOMAIN=$(ls /etc/letsencrypt/live/ 2>/dev/null | grep -v README | head -1)
+fi
+if [ -n "$DOMAIN" ]; then
+    sed "s/DOMAIN/$DOMAIN/g" "$JARVIS_DIR/deploy/nginx-jarvis.conf" \
+        | sudo tee /etc/nginx/sites-available/jarvis > /dev/null
+    sudo ln -sf /etc/nginx/sites-available/jarvis /etc/nginx/sites-enabled/jarvis
+    sudo nginx -t && sudo systemctl reload nginx
+    echo "==> nginx reloaded for $DOMAIN"
+    # Patch NEXT_PUBLIC_BRAIN_URL to include /brain path if it's still bare domain
+    ENV_FILE="$JARVIS_DIR/src/website/.env.local"
+    if [ -f "$ENV_FILE" ] && grep -q "^NEXT_PUBLIC_BRAIN_URL=" "$ENV_FILE"; then
+        if ! grep -q "^NEXT_PUBLIC_BRAIN_URL=.*/brain" "$ENV_FILE"; then
+            sed -i "s~^NEXT_PUBLIC_BRAIN_URL=https://\([^/]*\)\$~NEXT_PUBLIC_BRAIN_URL=https://\1/brain~" "$ENV_FILE"
+            echo "==> Patched NEXT_PUBLIC_BRAIN_URL to include /brain"
+        fi
+    fi
+else
+    echo "WARN: could not detect domain, skipping nginx update"
+fi
+
 echo "==> Deploy complete. Services status:"
 sudo systemctl is-active jarvis-brain jarvis-sidecar jarvis-gateway jarvis-website || true

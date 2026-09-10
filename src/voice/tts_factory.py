@@ -9,7 +9,7 @@ _DEFAULT_VOICE_ID = 'pqHfZKP75CvOlQylNhV4'
 
 
 def get_tts_service():
-    provider = os.environ.get('TTS_PROVIDER', 'elevenlabs')
+    provider = os.environ.get('TTS_PROVIDER', 'groq')
     if provider == 'elevenlabs':
         api_key = os.environ.get('ELEVENLABS_API_KEY')
         assert api_key, 'ELEVENLABS_API_KEY is required when TTS_PROVIDER=elevenlabs'
@@ -36,8 +36,16 @@ def get_tts_service():
             api_key=api_key,
             voice=os.environ.get('OPENAI_TTS_VOICE', 'onyx'),
         )
+    elif provider == 'groq':
+        api_key = os.environ.get('GROQ_API_KEY')
+        assert api_key, 'GROQ_API_KEY is required when TTS_PROVIDER=groq'
+        from pipecat.services.groq.tts import GroqTTSService
+        return GroqTTSService(
+            api_key=api_key,
+            settings=GroqTTSService.Settings(model='playai-tts', voice='Fritz-PlayAI'),
+        )
     else:
         raise ValueError(
             f'Unknown TTS provider: {provider}. '
-            'Set TTS_PROVIDER to elevenlabs, cartesia, or openai.'
+            'Set TTS_PROVIDER to elevenlabs, cartesia, openai, or groq.'
         )

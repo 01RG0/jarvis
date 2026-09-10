@@ -69,7 +69,7 @@ for svc in brain sidecar gateway website; do
 done
 
 # Give user passwordless sudo for service restarts (deploy only)
-SUDOERS_LINE="$USERNAME ALL=(ALL) NOPASSWD: /bin/systemctl restart jarvis-brain, /bin/systemctl restart jarvis-sidecar, /bin/systemctl restart jarvis-gateway, /bin/systemctl restart jarvis-website, /bin/systemctl is-active jarvis-brain jarvis-sidecar jarvis-gateway jarvis-website"
+SUDOERS_LINE="$USERNAME ALL=(ALL) NOPASSWD: /bin/systemctl restart jarvis-brain, /bin/systemctl restart jarvis-sidecar, /bin/systemctl restart jarvis-gateway, /bin/systemctl restart jarvis-website, /bin/systemctl is-active jarvis-brain jarvis-sidecar jarvis-gateway jarvis-website, /bin/systemctl reload nginx, /usr/sbin/nginx, /usr/bin/tee /etc/nginx/sites-available/jarvis, /usr/bin/ln -sf /etc/nginx/sites-available/jarvis /etc/nginx/sites-enabled/jarvis"
 echo "$SUDOERS_LINE" | sudo tee /etc/sudoers.d/jarvis-deploy > /dev/null
 sudo chmod 440 /etc/sudoers.d/jarvis-deploy
 

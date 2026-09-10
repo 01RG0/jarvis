@@ -2,26 +2,20 @@ import asyncio
 import logging
 import os
 
-import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-BRAIN_URL = os.environ.get('BRAIN_INTERNAL_URL', 'http://localhost:8001')
 VOICE_WS_PORT = int(os.environ.get('VOICE_WS_PORT', '8765'))
-VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'llama-3.1-8b-instant')
+VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'llama3-8b-8192')
 
-
-async def call_brain(task_id: str, user_text: str) -> str:
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            f'{BRAIN_URL}/task',
-            json={'id': task_id, 'input': user_text, 'model': 'balanced'},
-        )
-        resp.raise_for_status()
-        return resp.json().get('result', '')
+JARVIS_SYSTEM = (
+    "You are J.A.R.V.I.S. — Just A Rather Very Intelligent System, the personal AI of your user. "
+    "You speak with calm precision and dry wit. Keep voice responses concise — 1-3 sentences. "
+    "Address the user respectfully. Never break character."
+)
 
 
 async def run_pipeline() -> None:
@@ -30,14 +24,20 @@ async def run_pipeline() -> None:
         from pipecat.pipeline.pipeline import Pipeline
         from pipecat.pipeline.runner import PipelineRunner
         from pipecat.pipeline.task import PipelineParams, PipelineTask
-        from pipecat.services.openai import OpenAILLMService
-        from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-        from pipecat.transports.network.websocket_server import (
+        from pipecat.services.groq.llm import GroqLLMService
+        from pipecat.processors.aggregators.llm_context import LLMContext
+        from pipecat.processors.aggregators.llm_response_universal import (
+            LLMUserAggregator,
+            LLMAssistantAggregator,
+            LLMUserAggregatorParams,
+            LLMAssistantAggregatorParams,
+        )
+        from pipecat.transports.websocket.server import (
             WebsocketServerParams,
             WebsocketServerTransport,
         )
     except ImportError as e:
-        logger.error('Pipecat not installed: %s. Run: pip install "pipecat-ai[deepgram,elevenlabs,silero,websocket]"', e)
+        logger.error('Pipecat not installed: %s. Run: pip install "pipecat-ai[groq,silero,websocket]"', e)
         raise
 
     from stt_factory import get_stt_service
@@ -58,25 +58,23 @@ async def run_pipeline() -> None:
 
     stt = get_stt_service()
     tts = get_tts_service()
-    llm = OpenAILLMService(
+    llm = GroqLLMService(
         api_key=groq_key,
-        base_url='https://api.groq.com/openai/v1',
-        model=VOICE_LLM_MODEL,
+        settings=GroqLLMService.Settings(model=VOICE_LLM_MODEL),
     )
 
-    context = OpenAILLMContext(messages=[
-        {'role': 'system', 'content': 'You are Jarvis, a personal AI assistant. Be concise and helpful.'},
-    ])
-    context_aggregator = llm.create_context_aggregator(context)
+    context = LLMContext(messages=[{'role': 'system', 'content': JARVIS_SYSTEM}])
+    user_agg = LLMUserAggregator(context, params=LLMUserAggregatorParams())
+    assistant_agg = LLMAssistantAggregator(context, params=LLMAssistantAggregatorParams())
 
     pipeline = Pipeline([
         transport.input(),
         stt,
-        context_aggregator.user(),
+        user_agg,
         llm,
         tts,
         transport.output(),
-        context_aggregator.assistant(),
+        assistant_agg,
     ])
 
     task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
