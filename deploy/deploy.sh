@@ -51,6 +51,7 @@ sudo systemctl restart jarvis-gateway
 # ── Next.js website ──────────────────────────────────────────────────────────
 echo "==> Building website..."
 cd "$JARVIS_DIR/src/website"
+rm -rf .next
 npm install --legacy-peer-deps --silent
 npm run build
 # standalone mode: copy static assets so nginx can serve them directly
