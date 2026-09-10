@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Volume2, Mic, Palette } from 'lucide-react';
 
 type TtsProvider = 'piper' | 'kokoro' | 'elevenlabs' | 'cartesia' | 'fish_audio';
@@ -15,15 +15,31 @@ const THEMES: Theme[] = [
   { label: 'Violet',      ring: '#a855f7', bg: '#130d1a', cssVar: '168,85,247' },
 ];
 
+const ls = (key: string) =>
+  typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+
 interface SettingsWidgetProps {
   onClose: () => void;
 }
 
 export default function SettingsWidget({ onClose }: SettingsWidgetProps) {
-  const [ttsProvider, setTtsProvider] = useState<TtsProvider>('piper');
-  const [voiceMode, setVoiceMode]     = useState(false);
-  const [brightness, setBrightness]   = useState(100);
-  const [theme, setTheme]             = useState(0);
+  const [ttsProvider, setTtsProvider] = useState<TtsProvider>(
+    () => (ls('jarvis_tts') as TtsProvider) ?? 'piper'
+  );
+  const [voiceMode, setVoiceMode] = useState(
+    () => ls('jarvis_voice_mode') === 'true'
+  );
+  const [brightness, setBrightness] = useState(
+    () => Number(ls('jarvis_brightness') ?? 100)
+  );
+  const [theme, setTheme] = useState(
+    () => Number(ls('jarvis_theme') ?? 0)
+  );
+
+  useEffect(() => { localStorage.setItem('jarvis_tts', ttsProvider); }, [ttsProvider]);
+  useEffect(() => { localStorage.setItem('jarvis_voice_mode', String(voiceMode)); }, [voiceMode]);
+  useEffect(() => { localStorage.setItem('jarvis_brightness', String(brightness)); }, [brightness]);
+  useEffect(() => { localStorage.setItem('jarvis_theme', String(theme)); }, [theme]);
 
   function applyTheme(idx: number) {
     setTheme(idx);
@@ -34,6 +50,12 @@ export default function SettingsWidget({ onClose }: SettingsWidgetProps) {
     document.documentElement.style.setProperty('--jarvis-cyan-dim', t.ring);
     document.body.style.setProperty('--theme-rgb', t.cssVar);
   }
+
+  // Restore theme CSS vars on mount
+  useEffect(() => {
+    applyTheme(theme);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const providers: { id: TtsProvider; label: string }[] = [
     { id: 'piper',      label: 'Piper (local)'    },
