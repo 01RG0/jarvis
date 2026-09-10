@@ -14,11 +14,10 @@ def get_mem0_config() -> dict:
             },
         },
         "llm": {
-            "provider": "openai",
+            "provider": "anthropic",
             "config": {
-                "model": "qwen-plus",
-                "openai_api_key": os.environ.get("ALIBABA_API_KEY", ""),
-                "openai_api_base": os.environ.get("ALIBABA_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
+                "model": "claude-haiku-4-5-20251001",
+                "api_key": os.environ.get("ANTHROPIC_API_KEY", ""),
             },
         },
         "embedder": {

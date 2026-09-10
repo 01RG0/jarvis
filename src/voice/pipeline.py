@@ -9,7 +9,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 VOICE_WS_PORT = int(os.environ.get('VOICE_WS_PORT', '8765'))
-VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'llama-3.3-70b-versatile')
+VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'qwen/qwen3.8-27b')
 
 JARVIS_SYSTEM = (
     "You are J.A.R.V.I.S. — Just A Rather Very Intelligent System, the personal AI of your user. "
