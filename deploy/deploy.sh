@@ -9,7 +9,12 @@ echo "==> Deploying from $JARVIS_DIR"
 # ── Python brain ─────────────────────────────────────────────────────────────
 echo "==> Installing Python deps..."
 cd "$JARVIS_DIR/src/brain"
-pip install -q -r requirements.txt
+VENV="$JARVIS_DIR/.venv"
+if [ ! -d "$VENV" ]; then
+    python3 -m venv "$VENV"
+fi
+"$VENV/bin/pip" install -q --upgrade pip
+"$VENV/bin/pip" install -q -r requirements.txt
 
 echo "==> Restarting brain service..."
 sudo systemctl restart jarvis-brain
@@ -25,7 +30,7 @@ sudo systemctl restart jarvis-sidecar
 # ── Node.js gateway ──────────────────────────────────────────────────────────
 echo "==> Installing gateway deps..."
 cd "$JARVIS_DIR/src/gateway"
-npm ci --prefer-offline --silent
+npm ci --silent
 
 echo "==> Restarting gateway service..."
 sudo systemctl restart jarvis-gateway
@@ -33,7 +38,7 @@ sudo systemctl restart jarvis-gateway
 # ── Next.js website ──────────────────────────────────────────────────────────
 echo "==> Building website..."
 cd "$JARVIS_DIR/src/website"
-npm ci --prefer-offline --silent
+npm install --legacy-peer-deps --silent
 npm run build
 
 echo "==> Restarting website service..."
