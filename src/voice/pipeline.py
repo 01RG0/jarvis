@@ -18,27 +18,24 @@ JARVIS_SYSTEM = (
 )
 
 
-async def run_pipeline() -> None:
-    try:
-        from pipecat.audio.vad.silero import SileroVADAnalyzer
-        from pipecat.pipeline.pipeline import Pipeline
-        from pipecat.pipeline.runner import PipelineRunner
-        from pipecat.pipeline.task import PipelineParams, PipelineTask
-        from pipecat.services.groq.llm import GroqLLMService
-        from pipecat.processors.aggregators.llm_context import LLMContext
-        from pipecat.processors.aggregators.llm_response_universal import (
-            LLMUserAggregator,
-            LLMAssistantAggregator,
-            LLMUserAggregatorParams,
-            LLMAssistantAggregatorParams,
-        )
-        from pipecat.transports.websocket.server import (
-            WebsocketServerParams,
-            WebsocketServerTransport,
-        )
-    except ImportError as e:
-        logger.error('Pipecat not installed: %s. Run: pip install "pipecat-ai[groq,silero,websocket]"', e)
-        raise
+async def _run_session() -> None:
+    """Run one client session. Called in a loop so the server respawns after each disconnect."""
+    from pipecat.audio.vad.silero import SileroVADAnalyzer
+    from pipecat.pipeline.pipeline import Pipeline
+    from pipecat.pipeline.runner import PipelineRunner
+    from pipecat.pipeline.task import PipelineParams, PipelineTask
+    from pipecat.services.groq.llm import GroqLLMService
+    from pipecat.processors.aggregators.llm_context import LLMContext
+    from pipecat.processors.aggregators.llm_response_universal import (
+        LLMUserAggregator,
+        LLMAssistantAggregator,
+        LLMUserAggregatorParams,
+        LLMAssistantAggregatorParams,
+    )
+    from pipecat.transports.websocket.server import (
+        WebsocketServerParams,
+        WebsocketServerTransport,
+    )
 
     from stt_factory import get_stt_service
     from tts_factory import get_tts_service
@@ -77,10 +74,26 @@ async def run_pipeline() -> None:
         assistant_agg,
     ])
 
-    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True, idle_timeout=86400))
+    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
     runner = PipelineRunner()
-    logger.info('Voice pipeline starting on ws://0.0.0.0:%d', VOICE_WS_PORT)
     await runner.run(task)
+
+
+async def run_pipeline() -> None:
+    """Accept connections forever — restart pipeline after each client disconnects."""
+    try:
+        from pipecat.transports.websocket.server import WebsocketServerTransport  # noqa: F401
+    except ImportError as e:
+        logger.error('Pipecat not installed: %s', e)
+        raise
+
+    logger.info('Voice server starting on ws://0.0.0.0:%d — waiting for connections', VOICE_WS_PORT)
+    while True:
+        try:
+            await _run_session()
+        except Exception as e:
+            logger.warning('Session ended (%s), restarting in 1s…', e)
+        await asyncio.sleep(1)
 
 
 if __name__ == '__main__':
