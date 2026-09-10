@@ -33,8 +33,8 @@ async def _run_session() -> None:
         LLMAssistantAggregatorParams,
     )
     from pipecat.transports.websocket.server import (
-        WebsocketServerParams,
-        WebsocketServerTransport,
+        SingleClientWebsocketServerParams,
+        SingleClientWebsocketServerTransport,
     )
 
     from stt_factory import get_stt_service
@@ -42,10 +42,10 @@ async def _run_session() -> None:
 
     groq_key = os.environ.get('GROQ_API_KEY', '')
 
-    transport = WebsocketServerTransport(
+    transport = SingleClientWebsocketServerTransport(
         host='0.0.0.0',
         port=VOICE_WS_PORT,
-        params=WebsocketServerParams(
+        params=SingleClientWebsocketServerParams(
             audio_out_enabled=True,
             vad_enabled=True,
             vad_analyzer=SileroVADAnalyzer(),
@@ -74,7 +74,7 @@ async def _run_session() -> None:
         assistant_agg,
     ])
 
-    worker = PipelineWorker(pipeline, params=PipelineParams(allow_interruptions=True))
+    worker = PipelineWorker(pipeline, params=PipelineParams(allow_interruptions=True), enable_rtvi=False)
     runner = WorkerRunner()
     await runner.add_workers(worker)
     await runner.run()
@@ -83,7 +83,7 @@ async def _run_session() -> None:
 async def run_pipeline() -> None:
     """Accept connections forever — restart pipeline after each client disconnects."""
     try:
-        from pipecat.transports.websocket.server import WebsocketServerTransport  # noqa: F401
+        from pipecat.transports.websocket.server import SingleClientWebsocketServerTransport  # noqa: F401
     except ImportError as e:
         logger.error('Pipecat not installed: %s', e)
         raise
