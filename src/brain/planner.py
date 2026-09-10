@@ -141,7 +141,7 @@ def plan_node(state: TaskState) -> TaskState:
 
 def execute_node(state: TaskState) -> TaskState:
     try:
-        res = call_llm("smart", "Plan:\n" + state["plan"] + "\n\nExecute and give the final answer")
+        res = call_llm("balanced", "Plan:\n" + state["plan"] + "\n\nExecute and give the final answer")
         return {
             **state,
             "result": res["content"],

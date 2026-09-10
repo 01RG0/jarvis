@@ -16,7 +16,7 @@ def get_mem0_config() -> dict:
         "llm": {
             "provider": "groq",
             "config": {
-                "model": "llama-3.1-8b-instant",
+                "model": "llama3-8b-8192",
                 "api_key": os.environ.get("GROQ_API_KEY", ""),
             },
         },
