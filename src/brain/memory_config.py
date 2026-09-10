@@ -14,10 +14,11 @@ def get_mem0_config() -> dict:
             },
         },
         "llm": {
-            "provider": "groq",
+            "provider": "openai",
             "config": {
-                "model": "llama-3.1-8b-instant",
-                "api_key": os.environ.get("GROQ_API_KEY", ""),
+                "model": "qwen-plus",
+                "openai_api_key": os.environ.get("ALIBABA_API_KEY", ""),
+                "openai_api_base": os.environ.get("ALIBABA_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
             },
         },
         "embedder": {
