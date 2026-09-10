@@ -44,7 +44,9 @@ npm run build
 cp -r .next/static .next/standalone/.next/static
 # allow nginx (www-data) to read static files
 chmod -R o+rX .next/standalone/.next/static/
-chmod o+x "$JARVIS_DIR" /home/rootuser
+# grant www-data traverse access using ACLs (not world-executable)
+setfacl -m u:www-data:x /home/rootuser 2>/dev/null || chmod o+x /home/rootuser
+setfacl -m u:www-data:x "$JARVIS_DIR" 2>/dev/null || chmod o+x "$JARVIS_DIR"
 
 echo "==> Restarting website service..."
 sudo systemctl restart jarvis-website

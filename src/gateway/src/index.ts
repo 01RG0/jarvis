@@ -73,7 +73,7 @@ app.get('/workers', (_req, res) => {
 })
 
 const server = http.createServer(app)
-const wss = new WebSocketServer({ server, path: '/ws' })
+const wss = new WebSocketServer({ server, path: '/ws', perMessageDeflate: false })
 setupWebSocket(wss)
 setupVoiceProxy(server)
 
