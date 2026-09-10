@@ -19,6 +19,18 @@ fi
 echo "==> Restarting brain service..."
 sudo systemctl restart jarvis-brain
 
+# ── Voice pipeline ────────────────────────────────────────────────────────────
+echo "==> Installing voice deps..."
+VENV_VOICE="$JARVIS_DIR/.venv-voice"
+if [ ! -d "$VENV_VOICE" ]; then
+    python3 -m venv "$VENV_VOICE"
+fi
+"$VENV_VOICE/bin/pip" install -q --upgrade pip
+"$VENV_VOICE/bin/pip" install -q -r "$JARVIS_DIR/src/voice/requirements.txt"
+
+echo "==> Restarting voice service..."
+sudo systemctl restart jarvis-voice
+
 # ── Go sidecar ───────────────────────────────────────────────────────────────
 echo "==> Building Go sidecar..."
 cd "$JARVIS_DIR/src/sidecar"
@@ -79,4 +91,4 @@ else
 fi
 
 echo "==> Deploy complete. Services status:"
-sudo systemctl is-active jarvis-brain jarvis-sidecar jarvis-gateway jarvis-website || true
+sudo systemctl is-active jarvis-brain jarvis-sidecar jarvis-gateway jarvis-website jarvis-voice || true
