@@ -92,10 +92,16 @@ def _daily_summary() -> None:
     log.info("Good morning. Daily summary ready.")
 
 
+def _self_update_job() -> None:
+    from self_update_agent import run_cycle
+    asyncio.create_task(run_cycle())
+
+
 def _register_builtin_jobs(scheduler: AsyncIOScheduler) -> None:
     scheduler.add_job(_heartbeat_log, IntervalTrigger(seconds=60), id="heartbeat_log", replace_existing=True)
     scheduler.add_job(_stats_snapshot, IntervalTrigger(seconds=300), id="stats_snapshot", replace_existing=True)
     scheduler.add_job(_daily_summary, CronTrigger(hour=8, minute=0), id="daily_summary", replace_existing=True)
+    scheduler.add_job(_self_update_job, IntervalTrigger(hours=6), id="self_update", replace_existing=True)
 
 
 # ── LangGraph tools ──────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import asyncio
+import re
 from typing import TypedDict
 from llm_router import call_llm
 from langgraph.graph import StateGraph, END
@@ -32,6 +33,13 @@ def route_node(state: TaskState) -> TaskState:
 def memory_node(state: TaskState) -> TaskState:
     from memory import get_memory
     context = get_memory().get_context(state['input'])
+    try:
+        import win32gui
+        title = win32gui.GetWindowText(win32gui.GetForegroundWindow())
+        if title:
+            context = f"Active window: {title}\n\n{context}" if context else f"Active window: {title}"
+    except Exception:
+        pass
     return {**state, 'memory_context': context}
 
 
@@ -87,6 +95,34 @@ def fast_node(state: TaskState) -> TaskState:
         "cost_usd": res["cost_usd"],
         "duration_ms": res["duration_ms"],
     }
+
+
+def parallel_agents_node(state: TaskState) -> TaskState:
+    plan = state.get("plan", "")
+    steps = re.findall(r"(?:^|\n)\s*\d+\.\s+(.+)", plan)
+    if len(steps) < 3:
+        return state
+    dep_words = {"then", "after", "next", "following", "result", "above", "previous", "based on"}
+    if any(word in step.lower() for step in steps for word in dep_words):
+        return state
+    try:
+        loop = asyncio.get_event_loop()
+        futures = [
+            loop.run_in_executor(None, call_llm, "fast", f"Answer concisely: {step}")
+            for step in steps[:5]
+        ]
+        results = loop.run_until_complete(asyncio.gather(*futures, return_exceptions=True))
+        lines = []
+        for i, (step, res) in enumerate(zip(steps, results), 1):
+            if isinstance(res, Exception):
+                lines.append(f"{i}. [skipped: {step[:60]}]")
+            else:
+                lines.append(f"{i}. {res['content'][:200]}")
+        combined = "Parallel agent results:\n" + "\n".join(lines)
+        existing = state.get("tool_result") or ""
+        return {**state, "tool_result": (existing + "\n\n" + combined).strip()}
+    except Exception:
+        return state
 
 
 def plan_node(state: TaskState) -> TaskState:
@@ -194,7 +230,7 @@ def _route_after_verify(state: TaskState) -> str:
 
 def build_graph() -> StateGraph:
     g = StateGraph(TaskState)
-    for fn in (route_node, fast_node, plan_node, execute_node, verify_node, retry_node, output_node):
+    for fn in (route_node, fast_node, plan_node, parallel_agents_node, execute_node, verify_node, retry_node, output_node):
         g.add_node(fn.__name__, fn)
     g.add_node('memory_node', memory_node)
     g.add_node('skill_node', skill_node)
@@ -206,7 +242,8 @@ def build_graph() -> StateGraph:
     g.add_edge('skill_node', 'tool_node')
     g.add_edge('tool_node', 'plan_node')
     g.add_edge("fast_node", "save_memory_node")
-    g.add_edge("plan_node", "execute_node")
+    g.add_edge("plan_node", "parallel_agents_node")
+    g.add_edge("parallel_agents_node", "execute_node")
     g.add_edge("execute_node", "verify_node")
     g.add_conditional_edges("verify_node", _route_after_verify, {"retry_node": "retry_node", "output_node": "output_node"})
     g.add_edge("retry_node", "execute_node")

@@ -437,5 +437,87 @@ async def clap_wake() -> dict:
     return {"ok": True}
 
 
+@app.post("/api/self-update/trigger")
+async def trigger_self_update() -> dict:
+    from self_update_agent import run_cycle
+    asyncio.create_task(run_cycle())
+    return {"ok": True, "message": "Self-update cycle started"}
+
+
+@app.get("/api/self-update/status")
+async def self_update_status() -> dict:
+    seen_file = Path("data/github_scout_seen.json")
+    mcp_file = Path(__file__).parent / "mcp_plugins.json"
+    seen_count = 0
+    mcp_count = 0
+    try:
+        import json
+        if seen_file.exists():
+            seen_count = len(json.loads(seen_file.read_text()))
+        if mcp_file.exists():
+            mcp_count = len(json.loads(mcp_file.read_text()))
+    except Exception:
+        pass
+    from scheduler import list_jobs
+    jobs = list_jobs()
+    su_job = next((j for j in jobs if j["id"] == "self_update"), None)
+    return {
+        "next_run": su_job["next_run"] if su_job else None,
+        "github_repos_seen": seen_count,
+        "mcp_plugins_found": mcp_count,
+    }
+
+
+@app.get("/api/smart-home/devices")
+async def smart_home_devices() -> dict:
+    from tools.smart_home import SmartHomeTool
+    result = SmartHomeTool().run(action="list")
+    return {"ok": result.success, "devices": result.output, "error": result.error}
+
+
+class SmartHomeControlRequest(BaseModel):
+    action: str = "list"
+    entity_id: str = ""
+    temperature: float = 0.0
+
+
+@app.post("/api/smart-home/control")
+async def smart_home_control(body: SmartHomeControlRequest) -> dict:
+    from tools.smart_home import SmartHomeTool
+    result = SmartHomeTool().run(action=body.action, entity_id=body.entity_id, temperature=body.temperature)
+    return {"ok": result.success, "result": result.output, "error": result.error}
+
+
+@app.get("/api/smart-home/status")
+async def smart_home_status() -> dict:
+    return {"connected": bool(os.environ.get("HA_URL") and os.environ.get("HA_TOKEN")), "url": os.environ.get("HA_URL", "")}
+
+
+class ParallelTaskRequest(BaseModel):
+    tasks: list[TaskRequest]
+
+
+@app.post("/api/tasks/parallel")
+async def submit_parallel_tasks(body: ParallelTaskRequest) -> dict:
+    async def _run_one(task: TaskRequest) -> dict:
+        start = time.perf_counter()
+        try:
+            raw = await handle_task(task.id, task.input, task.model)
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            result, model_used, cost_usd, duration_ms = _normalize_result(raw, task.model, elapsed_ms)
+            return {"task_id": task.id, "result": result, "model_used": model_used, "cost_usd": cost_usd, "duration_ms": duration_ms, "error": None}
+        except Exception as e:
+            return {"task_id": task.id, "result": "", "model_used": task.model, "cost_usd": 0.0, "duration_ms": int((time.perf_counter() - start) * 1000), "error": str(e)}
+    results = await asyncio.gather(*[_run_one(t) for t in body.tasks])
+    return {"results": list(results)}
+
+
+@app.get("/api/agents/available")
+async def available_agents() -> list:
+    import shutil
+    agents = ["grok", "agy", "codex", "kilo", "vibe", "freebuff", "jules", "claude", "gemini"]
+    return [{"name": a, "available": bool(shutil.which(a))} for a in agents]
+
+
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=BRAIN_PORT, reload=False)

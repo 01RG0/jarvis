@@ -7,14 +7,24 @@ Do not run local LLM inference — cloud APIs only. See `docs/architecture.md` f
 ## Current Build Status
 - Phase 0 ✅ — Python brain skeleton + Go watchdog (`src/brain/`, `src/watchdog/`)
 - Phase 1 ✅ — LangGraph planner, FastAPI server, Node gateway, Next.js chat UI
-- Phase 2 🔄 — Memory layer (Mem0 + ChromaDB)
-- Phase 3–7 — Not started
+- Phase 2 ✅ — Memory layer (Mem0 + ChromaDB)
+- Phase 3 ✅ — CLI sub-agent dispatcher with risk-tier gate
+- Phase 4 ✅ — Voice pipeline (Pipecat STT→LLM→TTS + openWakeWord)
+- Phase 5 ✅ — HUD dashboard (animated orb, spend/tasks/memory/alerts panels)
+- Phase 6 ✅ — Proactive reporting (Telegram push + PC worker heartbeat)
+- Phase 7 ✅ — Learning loop (retry outcomes → Mem0)
+- Phase 8 ✅ — PC Agent (Windows remote control via WebSocket: screen/apps/browser/files/audio)
+- Phase 9 ✅ — LLM management (16 providers, 65+ live-tested models, task routing)
+- Phase 10 ✅ — Smart Context (active window + clipboard injected into every conversation)
+- Phase 11 ✅ — Smart Home (Home Assistant REST API — lights/climate/locks/switches)
+- Phase 12 ✅ — Multi-Agent Orchestration (parallel LangGraph planner + asyncio.gather fan-out)
+- Phase 13 ✅ — Self-Improvement Agent (auto bug-fix + GitHub scout + MCP discovery, runs every 6h)
 
-**Before coding:** check which phase is current. Don't build Phase N+2 features into Phase N.
+**All phases complete.** New capabilities: add to `src/brain/tools/` (auto-discovered) or run `python src/brain/tools/provider_admin.py add` for new LLM providers.
 
 ## Key Constraints
 - **8 GB RAM budget**: always-on processes must stay lean; see `docs/architecture.md` deployment table
-- **No Anthropic key yet** — use Groq (`groq/llama-3.1-8b-instant`) + Gemini (`gemini/gemini-1.5-flash`) for LLM calls
+- **16 providers active** — use Groq (`groq/openai/gpt-oss-20b`) for fast-path, Alibaba Qwen for balanced/smart
 - **No local model inference** — every LLM/STT/TTS call goes to a cloud API
 - **SQLite only** — no Postgres, no standalone vector DB for v1
 

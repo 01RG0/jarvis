@@ -166,6 +166,12 @@ See [`docs/llm-providers.md`](docs/llm-providers.md) for full provider reference
 | 5 | UI polish | Animated HUD/avatar; full dashboard (spend, tasks, memory browser, alerts) |
 | 6 | Proactive reporting | PC worker heartbeat; issue→A/B/C fix pipeline; phone push notifications |
 | 7 | Learning loop | Mistake-memory mechanism; retry outcomes feed back into planning |
+| 8 | PC Agent | Windows remote control — screenshot, app launch, browser, files, audio via WebSocket |
+| 9 | LLM Management | 16 providers, 65+ live-tested models, per-task routing, provider admin CLI |
+| 10 | Smart Context | Active window title + clipboard injected into every conversation |
+| 11 | Smart Home | Home Assistant REST API — lights, climate, locks, switches |
+| 12 | Multi-Agent | Parallel LangGraph planner, asyncio.gather fan-out, concurrent tool calls |
+| 13 | Self-Improvement | Autonomous: bug fixer + GitHub repo scout + MCP discovery, runs every 6h |
 | 8+ | Expansion | Monitoring/managing other active projects |
 
 See [`docs/plan/`](docs/plan/) for detailed per-phase specs.

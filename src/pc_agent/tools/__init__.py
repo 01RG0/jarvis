@@ -15,6 +15,11 @@ def register(name: str, fn: Callable, tier: str = "medium") -> None:
 
 
 def load_all() -> None:
-    from . import screen, system, windows, input_tools, files, browser, shell
-    # Each module calls register() at import time.
+    from . import screen, system, windows, input_tools, files, browser, shell, audio
     _ = screen, system, windows, input_tools, files, browser, shell
+    register("volume_get", audio.volume_get, "safe")
+    register("volume_set", audio.volume_set, "safe")
+    register("volume_mute", audio.volume_mute, "safe")
+    register("media_play_pause", audio.media_play_pause, "safe")
+    register("media_next", audio.media_next, "safe")
+    register("media_prev", audio.media_prev, "safe")
