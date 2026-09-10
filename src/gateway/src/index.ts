@@ -73,9 +73,24 @@ app.get('/workers', (_req, res) => {
 })
 
 const server = http.createServer(app)
-const wss = new WebSocketServer({ server, path: '/ws', perMessageDeflate: false })
+
+const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false })
 setupWebSocket(wss)
-setupVoiceProxy(server)
+
+const voiceWss = new WebSocketServer({ noServer: true })
+setupVoiceProxy(voiceWss)
+
+server.on('upgrade', (req, socket, head) => {
+  const idx = (req.url || '').indexOf('?')
+  const pathname = idx !== -1 ? (req.url || '').slice(0, idx) : (req.url || '')
+  if (pathname === '/ws') {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
+  } else if (pathname === '/voice') {
+    voiceWss.handleUpgrade(req, socket, head, (ws) => voiceWss.emit('connection', ws, req))
+  } else {
+    socket.destroy()
+  }
+})
 
 const PORT = parseInt(process.env.GATEWAY_PORT || '8080', 10)
 server.listen(PORT, () => {

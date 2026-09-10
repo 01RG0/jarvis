@@ -5,7 +5,6 @@ import { ChatMessage, OrbState, ServerStatus } from '@/lib/types';
 import { WidgetId } from '@/hooks/useWidgetManager';
 
 const GW_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'ws://localhost:8080';
-const GW_TOKEN = process.env.NEXT_PUBLIC_GATEWAY_TOKEN || 'dev-token';
 
 let audioCtxRef: AudioContext | null = null;
 
@@ -49,8 +48,8 @@ export function useJarvisWebSocket(options?: UseJarvisWebSocketOptions) {
   const VALID_ACTIONS: ReadonlySet<string> = new Set(['show', 'hide', 'toggle']);
 
   const connect = useCallback(() => {
-    const url = `${GW_URL}/ws?token=${GW_TOKEN}`;
-    console.log('[jarvis] connecting to', `${GW_URL}/ws`);
+    const url = `${GW_URL}/ws`;
+    console.log('[jarvis] connecting to', url);
     const ws = new WebSocket(url);
     wsRef.current = ws;
 

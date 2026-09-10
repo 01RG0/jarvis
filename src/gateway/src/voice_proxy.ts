@@ -1,22 +1,10 @@
-import http from 'http'
 import { WebSocketServer, WebSocket } from 'ws'
 import { IncomingMessage } from 'http'
-import { verifyToken } from './auth'
 
 const VOICE_WS_URL = process.env.VOICE_WS_URL || 'ws://localhost:8765'
 
-export function setupVoiceProxy(server: http.Server): void {
-  const wss = new WebSocketServer({ server, path: '/voice' })
-
+export function setupVoiceProxy(wss: WebSocketServer): void {
   wss.on('connection', (client: WebSocket, req: IncomingMessage) => {
-    const url = new URL(req.url || '/', `http://${req.headers.host}`)
-    const token = url.searchParams.get('token') || ''
-
-    if (!verifyToken(token)) {
-      client.close(4401, 'Unauthorized')
-      return
-    }
-
     const upstream = new WebSocket(VOICE_WS_URL)
     let upstreamReady = false
     const pendingFrames: Buffer[] = []
@@ -59,5 +47,5 @@ export function setupVoiceProxy(server: http.Server): void {
     })
   })
 
-  console.log('[gateway] voice proxy mounted at /voice → ' + VOICE_WS_URL)
+  console.log('[gateway] voice proxy ready at /voice → ' + VOICE_WS_URL)
 }
