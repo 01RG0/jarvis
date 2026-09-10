@@ -50,7 +50,7 @@ export function useJarvisWebSocket(options?: UseJarvisWebSocketOptions) {
 
   const connect = useCallback(() => {
     const url = `${GW_URL}/ws?token=${GW_TOKEN}`;
-    console.log('[jarvis] connecting to', url);
+    console.log('[jarvis] connecting to', `${GW_URL}/ws`);
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
