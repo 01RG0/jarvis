@@ -80,7 +80,7 @@ export default function VoicePage() {
       const ctx = audioCtxRef.current!;
       const src = ctx.createMediaStreamSource(stream);
       sourceRef.current = src;
-      const proc = ctx.createScriptProcessor(Math.floor(SAMPLE_RATE * CHUNK_MS / 1000), 1, 1);
+      const proc = ctx.createScriptProcessor(2048, 1, 1);  // must be power-of-2; 2048 ≈ 128ms @ 16kHz
       processorRef.current = proc;
       proc.onaudioprocess = (e) => {
         if (mutedRef.current) return;
