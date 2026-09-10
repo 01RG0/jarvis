@@ -76,7 +76,7 @@ async def _run_session() -> None:
 
     worker = PipelineWorker(pipeline, params=PipelineParams(allow_interruptions=True))
     runner = WorkerRunner()
-    runner.add_workers(worker)
+    await runner.add_workers(worker)
     await runner.run()
 
 
