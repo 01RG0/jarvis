@@ -48,7 +48,7 @@ export default function VoicePage() {
   const sourceRef   = useRef<MediaStreamAudioSourceNode | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const streamRef   = useRef<MediaStream | null>(null);
-  const recogRef    = useRef<InstanceType<typeof window.SpeechRecognition> | null>(null);
+  const recogRef    = useRef<SpeechRecognition | null>(null);
   const bottomRef   = useRef<HTMLDivElement>(null);
   const pttRef      = useRef(false);
 
