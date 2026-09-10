@@ -1,0 +1,395 @@
+'use client';
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Mic, MicOff, Volume2 } from 'lucide-react';
+
+const VOICE_URL = process.env.NEXT_PUBLIC_VOICE_URL || 'wss://localhost/voice-pipeline';
+const WAKE_PHRASES = ['hey jarvis', 'jarvis'];
+const SAMPLE_RATE = 16000;
+const CHUNK_MS = 100;
+
+type Status = 'idle' | 'standby' | 'listening' | 'processing' | 'speaking' | 'error';
+
+interface Line {
+  id: number;
+  role: 'user' | 'jarvis';
+  text: string;
+}
+
+let _lid = 0;
+
+const STATUS_LABEL: Record<Status, string> = {
+  idle:       'OFFLINE',
+  standby:    'STANDBY',
+  listening:  'LISTENING',
+  processing: 'PROCESSING',
+  speaking:   'SPEAKING',
+  error:      'ERROR',
+};
+
+const STATUS_COLOR: Record<Status, string> = {
+  idle:       'rgba(148,163,184,0.4)',
+  standby:    'rgba(0,168,255,0.5)',
+  listening:  'rgba(0,255,136,0.9)',
+  processing: 'rgba(251,191,36,0.9)',
+  speaking:   'rgba(0,168,255,0.9)',
+  error:      'rgba(239,68,68,0.9)',
+};
+
+export default function VoicePage() {
+  const [status, setStatus]           = useState<Status>('idle');
+  const [transcript, setTranscript]   = useState('');
+  const [lines, setLines]             = useState<Line[]>([]);
+  const [micAllowed, setMicAllowed]   = useState<boolean | null>(null);
+  const [pttActive, setPttActive]     = useState(false);
+
+  const wsRef       = useRef<WebSocket | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceRef   = useRef<MediaStreamAudioSourceNode | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const streamRef   = useRef<MediaStream | null>(null);
+  const recogRef    = useRef<InstanceType<typeof window.SpeechRecognition> | null>(null);
+  const bottomRef   = useRef<HTMLDivElement>(null);
+  const pttRef      = useRef(false);
+
+  function addLine(role: 'user' | 'jarvis', text: string) {
+    setLines(prev => [...prev.slice(-49), { id: ++_lid, role, text }]);
+  }
+
+  // ── Audio capture helpers ──────────────────────────────────────────────────
+
+  const stopAudioCapture = useCallback(() => {
+    processorRef.current?.disconnect();
+    sourceRef.current?.disconnect();
+    processorRef.current = null;
+    sourceRef.current    = null;
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+  }, []);
+
+  const startAudioCapture = useCallback(async () => {
+    if (processorRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: SAMPLE_RATE, channelCount: 1 }, video: false });
+      streamRef.current = stream;
+      const ctx = audioCtxRef.current!;
+      const src = ctx.createMediaStreamSource(stream);
+      sourceRef.current = src;
+      const proc = ctx.createScriptProcessor(Math.floor(SAMPLE_RATE * CHUNK_MS / 1000), 1, 1);
+      processorRef.current = proc;
+      proc.onaudioprocess = (e) => {
+        if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+        const float32 = e.inputBuffer.getChannelData(0);
+        const int16   = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          int16[i] = Math.max(-32768, Math.min(32767, Math.round(float32[i] * 32767)));
+        }
+        wsRef.current.send(int16.buffer);
+      };
+      src.connect(proc);
+      proc.connect(ctx.destination);
+    } catch {
+      setStatus('error');
+    }
+  }, []);
+
+  // ── WebSocket ──────────────────────────────────────────────────────────────
+
+  const openWs = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    const ws = new WebSocket(VOICE_URL);
+    ws.binaryType = 'arraybuffer';
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setStatus('listening');
+      startAudioCapture();
+    };
+
+    ws.onmessage = (e) => {
+      if (typeof e.data === 'string') {
+        try {
+          const msg = JSON.parse(e.data) as { type?: string; text?: string };
+          if (msg.type === 'transcript' && msg.text) {
+            addLine('user', msg.text);
+            setStatus('processing');
+          }
+          if (msg.type === 'response' && msg.text) {
+            addLine('jarvis', msg.text);
+            setStatus('speaking');
+          }
+          if (msg.type === 'done') {
+            setStatus('standby');
+          }
+        } catch { /* ignore */ }
+      } else {
+        // Binary = TTS audio PCM
+        playAudioChunk(e.data as ArrayBuffer);
+        setStatus('speaking');
+      }
+    };
+
+    ws.onclose = () => {
+      stopAudioCapture();
+      if (!pttRef.current) setStatus('standby');
+    };
+
+    ws.onerror = () => {
+      stopAudioCapture();
+      setStatus('error');
+    };
+  }, [startAudioCapture, stopAudioCapture]);
+
+  const closeWs = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    stopAudioCapture();
+    setStatus('standby');
+  }, [stopAudioCapture]);
+
+  // ── TTS playback ───────────────────────────────────────────────────────────
+
+  function playAudioChunk(buffer: ArrayBuffer) {
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+    const int16 = new Int16Array(buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+    const audioBuffer = ctx.createBuffer(1, float32.length, SAMPLE_RATE);
+    audioBuffer.getChannelData(0).set(float32);
+    const src = ctx.createBufferSource();
+    src.buffer = audioBuffer;
+    src.connect(ctx.destination);
+    src.start();
+    src.onended = () => setStatus(s => s === 'speaking' ? 'standby' : s);
+  }
+
+  // ── Wake word via SpeechRecognition ───────────────────────────────────────
+
+  const startWakeWord = useCallback(() => {
+    const SR = (window as typeof window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
+            || (window as typeof window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    recogRef.current = r;
+    r.continuous      = true;
+    r.interimResults  = true;
+    r.lang            = 'en-US';
+
+    r.onresult = (e: SpeechRecognitionEvent) => {
+      const heard = Array.from(e.results)
+        .map(res => res[0].transcript.toLowerCase())
+        .join(' ');
+      setTranscript(heard);
+      if (WAKE_PHRASES.some(w => heard.includes(w))) {
+        r.stop();
+        openWs();
+      }
+    };
+
+    r.onend = () => {
+      if (status !== 'listening' && status !== 'processing' && status !== 'speaking') {
+        try { r.start(); } catch { /* already running */ }
+      }
+    };
+
+    try { r.start(); } catch { /* already running */ }
+  }, [openWs, status]);
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  const init = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      stream.getTracks().forEach(t => t.stop());
+      setMicAllowed(true);
+      audioCtxRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
+      setStatus('standby');
+      startWakeWord();
+    } catch {
+      setMicAllowed(false);
+      setStatus('error');
+    }
+  }, [startWakeWord]);
+
+  useEffect(() => {
+    return () => {
+      recogRef.current?.stop();
+      closeWs();
+      audioCtxRef.current?.close();
+    };
+  }, [closeWs]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [lines]);
+
+  // ── Push-to-talk ──────────────────────────────────────────────────────────
+
+  function pttDown() {
+    pttRef.current = true;
+    setPttActive(true);
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
+    openWs();
+  }
+
+  function pttUp() {
+    pttRef.current = false;
+    setPttActive(false);
+    closeWs();
+  }
+
+  const orb = STATUS_COLOR[status];
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'rgba(3,6,12,0.97)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: "'Rajdhani','Fira Code',monospace",
+      color: 'rgba(224,240,255,0.85)',
+      gap: 32,
+      padding: 24,
+    }}>
+
+      {/* Orb */}
+      <div style={{ position: 'relative', width: 160, height: 160 }}>
+        {/* pulse rings */}
+        {(status === 'listening' || status === 'speaking') && (
+          <>
+            <div style={{ position: 'absolute', inset: -16, borderRadius: '50%', border: `1px solid ${orb}`, opacity: 0.3, animation: 'orbPulse 1.5s ease-out infinite' }} />
+            <div style={{ position: 'absolute', inset: -32, borderRadius: '50%', border: `1px solid ${orb}`, opacity: 0.15, animation: 'orbPulse 1.5s ease-out 0.4s infinite' }} />
+          </>
+        )}
+        <div style={{
+          width: 160, height: 160, borderRadius: '50%',
+          background: `radial-gradient(circle at 35% 35%, ${orb}, rgba(0,40,80,0.9) 70%)`,
+          boxShadow: `0 0 40px ${orb}40, 0 0 80px ${orb}20`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'all 0.4s ease',
+        }}>
+          {status === 'speaking'    ? <Volume2 size={36} color="rgba(255,255,255,0.8)" /> :
+           status === 'listening'   ? <Mic size={36} color="rgba(255,255,255,0.9)" /> :
+           status === 'processing'  ? <Mic size={36} color="rgba(251,191,36,0.9)" /> :
+                                      <MicOff size={32} color="rgba(148,163,184,0.5)" />}
+        </div>
+      </div>
+
+      {/* Status label */}
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 11, letterSpacing: '0.4em', color: orb, marginBottom: 4 }}>
+          {STATUS_LABEL[status]}
+        </div>
+        {transcript && status === 'standby' && (
+          <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.4)', maxWidth: 300, textAlign: 'center' }}>
+            {transcript.slice(-80)}
+          </div>
+        )}
+      </div>
+
+      {/* Permission gate */}
+      {micAllowed === null && (
+        <button
+          onClick={init}
+          style={{
+            background: 'rgba(0,168,255,0.1)',
+            border: '1px solid rgba(0,168,255,0.3)',
+            borderRadius: 8,
+            color: 'rgba(0,168,255,0.9)',
+            padding: '12px 28px',
+            fontSize: 13,
+            letterSpacing: '0.2em',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          ENABLE MICROPHONE
+        </button>
+      )}
+
+      {micAllowed === false && (
+        <div style={{ color: 'rgba(239,68,68,0.8)', fontSize: 12, letterSpacing: '0.15em' }}>
+          MICROPHONE ACCESS DENIED — CHECK BROWSER SETTINGS
+        </div>
+      )}
+
+      {/* Push-to-talk fallback */}
+      {micAllowed && (
+        <button
+          onMouseDown={pttDown}
+          onMouseUp={pttUp}
+          onTouchStart={pttDown}
+          onTouchEnd={pttUp}
+          style={{
+            background: pttActive ? 'rgba(0,168,255,0.2)' : 'rgba(0,168,255,0.06)',
+            border: `1px solid ${pttActive ? 'rgba(0,168,255,0.6)' : 'rgba(0,168,255,0.2)'}`,
+            borderRadius: 8,
+            color: pttActive ? 'rgba(0,168,255,1)' : 'rgba(0,168,255,0.5)',
+            padding: '10px 24px',
+            fontSize: 11,
+            letterSpacing: '0.3em',
+            cursor: 'pointer',
+            userSelect: 'none',
+            transition: 'all 0.15s',
+          }}
+        >
+          {pttActive ? '● TRANSMITTING' : 'HOLD TO TALK'}
+        </button>
+      )}
+
+      {/* Transcript */}
+      {lines.length > 0 && (
+        <div style={{
+          width: '100%', maxWidth: 560,
+          background: 'rgba(0,10,20,0.6)',
+          border: '1px solid rgba(0,168,255,0.08)',
+          borderRadius: 10,
+          maxHeight: 280,
+          overflowY: 'auto',
+          padding: '12px 0',
+        }}>
+          {lines.map(l => (
+            <div key={l.id} style={{
+              padding: '4px 16px',
+              display: 'flex',
+              gap: 10,
+              alignItems: 'flex-start',
+            }}>
+              <span style={{
+                fontSize: 9,
+                letterSpacing: '0.2em',
+                color: l.role === 'jarvis' ? 'rgba(0,168,255,0.6)' : 'rgba(0,255,136,0.5)',
+                minWidth: 44,
+                paddingTop: 2,
+                flexShrink: 0,
+              }}>
+                {l.role === 'jarvis' ? 'JARVIS' : 'YOU'}
+              </span>
+              <span style={{ fontSize: 13, lineHeight: 1.5, color: 'rgba(200,220,240,0.8)' }}>
+                {l.text}
+              </span>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      )}
+
+      {/* Wake word hint */}
+      {status === 'standby' && (
+        <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.3)', letterSpacing: '0.2em' }}>
+          SAY &quot;HEY JARVIS&quot; TO ACTIVATE
+        </div>
+      )}
+
+      <style>{`
+        @keyframes orbPulse {
+          0%   { transform: scale(1);   opacity: 0.4; }
+          100% { transform: scale(1.6); opacity: 0;   }
+        }
+      `}</style>
+    </div>
+  );
+}
