@@ -1,0 +1,18 @@
+[Unit]
+Description=JARVIS Node.js Gateway
+After=jarvis-brain.service
+Wants=jarvis-brain.service
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/jarvis/src/gateway
+EnvironmentFile=/home/%i/jarvis/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

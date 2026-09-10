@@ -11,6 +11,7 @@ user-invocable: false
 
 | CLI | Command | Timeout |
 |-----|---------|---------|
+| jules | `jules run "..." --dir D:/pRoG/jarvis` | 300s (async — poll with `jules status`) |
 | grok | `grok -p "..." --always-approve` | 180s |
 | agy | `agy --dangerously-skip-permissions --print="..."` | 240s |
 | codex | `codex exec -s workspace-write "..."` | 180s |
@@ -19,10 +20,20 @@ user-invocable: false
 
 **CRITICAL**: For agy, `--print=` must use `=` syntax and come AFTER `--dangerously-skip-permissions`. Never `agy --print "..." --dangerously-skip-permissions` — agy will treat the flag as the prompt.
 
+**Jules flow**: `jules run "..."` submits async → `jules status` polls → `jules apply` patches local files → `git diff` review.
+
 ## Fallback Order
-1. Try grok first (most reliable)
-2. If grok fails/times out → try agy
-3. If both fail → write the file directly (coordinator handles it)
+1. Try jules for large-scope/UI tasks (async, Google infra)
+2. Try grok for sync tasks (most reliable)
+3. If grok fails/times out → try agy
+4. If all fail → write the file directly (coordinator handles it)
+
+## Dynamic CLI Detection
+```bash
+# Auto-discover any installed coding CLIs not in known list
+bash D:/pRoG/jarvis/.claude/skills/cli-tracker/detect.sh
+```
+This scans PATH for coding/AI agent binaries and returns JSON of what's available.
 
 ## Verification After Each CLI Task
 ```bash

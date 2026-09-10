@@ -1,0 +1,19 @@
+[Unit]
+Description=JARVIS Next.js Website
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/jarvis/src/website
+EnvironmentFile=/home/%i/jarvis/.env
+ExecStart=/usr/bin/node .next/standalone/server.js
+Environment=PORT=3000
+Environment=HOSTNAME=0.0.0.0
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

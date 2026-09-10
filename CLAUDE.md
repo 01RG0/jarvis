@@ -46,12 +46,16 @@ Phase coordinators are defined in `.claude/agents/`. Each handles one phase auto
 ## Available CLIs (for sub-agent dispatch)
 | CLI | Non-interactive | Best for |
 |-----|----------------|---------|
-| grok | `grok -p "..." --always-approve` | Most reliable — use first |
+| jules | `jules run "..." --dir ...` | Large-scope/UI/async jobs — use first for big tasks |
+| grok | `grok -p "..." --always-approve` | Most reliable sync option — use first if jules unavail |
 | agy | `agy --dangerously-skip-permissions --print="..."` | Complex logic; watch for encoding |
 | codex | `codex exec -s workspace-write ...` | Well-specified coding tasks |
 | kilo | `kilo run "..." --dir ...` | Long-context multi-file |
 | vibe | `vibe -p "..." --auto-approve` | Boilerplate (times out on complex tasks) |
 | freebuff | TUI only | Manual use only |
+
+**Dynamic detection**: run `bash .claude/skills/cli-tracker/detect.sh` to auto-discover any
+additional coding CLIs installed in PATH (claude, gemini, copilot, etc.).
 
 ## Git Rules (from best-practice repo)
 - Separate commit per logical change (not per file if changes are coupled)

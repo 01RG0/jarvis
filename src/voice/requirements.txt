@@ -1,6 +1,16 @@
-pipecat-ai[deepgram,elevenlabs,silero,websocket]>=0.0.40
-openwakeword>=0.6.0
-pyaudio>=0.2.14
-numpy>=1.26.0
+pipecat-ai[silero,groq,elevenlabs]>=0.0.40
+# TTS providers
+piper-tts>=1.2.0
+kokoro>=0.9.0
+elevenlabs>=1.0.0
 httpx>=0.27.0
+# VAD + audio
+torch --index-url https://download.pytorch.org/whl/cpu
+torchaudio --index-url https://download.pytorch.org/whl/cpu
+huggingface_hub>=0.23.0
+numpy>=1.26.0
+# Server
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+websockets>=12.0
 python-dotenv>=1.0.0

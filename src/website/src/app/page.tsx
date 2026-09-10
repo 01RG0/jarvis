@@ -1,233 +1,412 @@
-'use client'
+'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import dynamic from 'next/dynamic'
+import { useState, useCallback, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import { OrbState } from '@/lib/types';
+import { useJarvisWebSocket } from '@/hooks/useJarvisWebSocket';
+import { useVoiceStream } from '@/hooks/useVoiceStream';
+import { useWidgetManager, WidgetId } from '@/hooks/useWidgetManager';
+import BottomDock from '@/components/BottomDock';
+import HudCorners from '@/components/HudCorners';
+import DraggableWidget from '@/components/DraggableWidget';
+import ChatWidget from '@/components/widgets/ChatWidget';
+import StatsWidget from '@/components/widgets/StatsWidget';
+import MemoryWidget from '@/components/widgets/MemoryWidget';
+import SettingsWidget from '@/components/widgets/SettingsWidget';
+import ClockWidget   from '@/components/widgets/ClockWidget';
+import NotesWidget   from '@/components/widgets/NotesWidget';
+import SysMonWidget  from '@/components/widgets/SysMonWidget';
+import GraphWidget   from '@/components/widgets/GraphWidget';
+import WebViewWidget from '@/components/widgets/WebViewWidget';
+import LogsWidget      from '@/components/widgets/LogsWidget';
+import MediaWidget     from '@/components/widgets/MediaWidget';
+import ProvidersWidget from '@/components/widgets/ProvidersWidget';
 
-const ArcReactor = dynamic(() => import('../components/ArcReactor'), { ssr: false })
-const Dashboard = dynamic(() => import('../components/Dashboard'), { ssr: false })
+const OrbRing = dynamic(() => import('@/components/OrbRing'), { ssr: false });
 
-interface Message {
-  id: string
-  role: 'user' | 'jarvis'
-  content: string
-}
-
-const GW_URL = (process.env.NEXT_PUBLIC_GATEWAY_URL || 'ws://localhost:8080')
-const GW_TOKEN = process.env.NEXT_PUBLIC_GATEWAY_TOKEN || 'dev-token'
-
-export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
-  const [connected, setConnected] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [voiceMode, setVoiceMode] = useState(false)
-  const [voiceActive, setVoiceActive] = useState(false)
-  const [showDash, setShowDash] = useState(false)
-
-  const wsRef = useRef<WebSocket | null>(null)
-  const voiceWsRef = useRef<WebSocket | null>(null)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const pendingRef = useRef<Map<string, (msg: Message) => void>>(new Map())
-
-  useEffect(() => {
-    const url = `${GW_URL}/ws?token=${GW_TOKEN}`
-    let retries = 0
-    function connect() {
-      const ws = new WebSocket(url)
-      wsRef.current = ws
-      ws.onopen = () => setConnected(true)
-      ws.onclose = () => {
-        setConnected(false)
-        if (retries < 3) { retries++; setTimeout(connect, 2000) }
-      }
-      ws.onmessage = (e) => {
-        const data = JSON.parse(e.data as string)
-        const resolve = pendingRef.current.get(data.id)
-        if (resolve) {
-          pendingRef.current.delete(data.id)
-          const content = data.error ? `Error: ${data.error}` : data.result
-          resolve({ id: data.id + '-reply', role: 'jarvis', content })
-        }
-      }
-    }
-    connect()
-    return () => wsRef.current?.close()
-  }, [])
+// Right-click context menu
+function OrbContextMenu({
+  x, y, onClose, onAction,
+}: {
+  x: number; y: number;
+  onClose: () => void;
+  onAction: (action: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const handleSend = () => {
-    if (!input.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
-    const id = crypto.randomUUID()
-    const userMsg: Message = { id, role: 'user', content: input.trim() }
-    setMessages(prev => [...prev, userMsg])
-    setLoading(true)
-    setInput('')
-    new Promise<Message>((resolve) => {
-      pendingRef.current.set(id, resolve)
-      wsRef.current!.send(JSON.stringify({ id, input: userMsg.content }))
-    }).then((reply) => {
-      setMessages(prev => [...prev, reply])
-      setLoading(false)
-    })
-  }
-
-  const startVoice = useCallback(async () => {
-    if (voiceActive) return
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const voiceUrl = `${GW_URL}/voice?token=${GW_TOKEN}`
-      const vws = new WebSocket(voiceUrl)
-      voiceWsRef.current = vws
-      audioContextRef.current = new AudioContext({ sampleRate: 16000 })
-      const audioCtx = audioContextRef.current
-
-      vws.binaryType = 'arraybuffer'
-      vws.onopen = () => {
-        setVoiceActive(true)
-        const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
-        mediaRecorderRef.current = recorder
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0 && vws.readyState === WebSocket.OPEN) vws.send(e.data)
-        }
-        recorder.start(100)
-      }
-
-      vws.onmessage = async (e) => {
-        if (e.data instanceof ArrayBuffer && e.data.byteLength > 0) {
-          try {
-            const decoded = await audioCtx.decodeAudioData(e.data.slice(0))
-            const source = audioCtx.createBufferSource()
-            source.buffer = decoded
-            source.connect(audioCtx.destination)
-            source.start()
-          } catch { /* non-audio frame */ }
-        }
-      }
-
-      vws.onclose = () => {
-        setVoiceActive(false)
-        stream.getTracks().forEach(t => t.stop())
-      }
-    } catch (err) {
-      console.error('[voice] start failed:', err)
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
-  }, [voiceActive])
+    window.addEventListener('mousedown', handler);
+    return () => window.removeEventListener('mousedown', handler);
+  }, [onClose]);
 
-  const stopVoice = useCallback(() => {
-    mediaRecorderRef.current?.stop()
-    voiceWsRef.current?.close()
-    audioContextRef.current?.close()
-    setVoiceActive(false)
-  }, [])
+  const items = [
+    { label: 'Chat',         action: 'chat',     key: 'C' },
+    { label: 'System stats', action: 'stats',    key: 'S' },
+    { label: 'Memory',       action: 'memory',   key: 'M' },
+    { label: 'Settings',     action: 'settings', key: '' },
+  ];
 
   return (
-    <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
-      {/* Main chat panel */}
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800 shrink-0">
-          <div className="flex items-center gap-4">
-            <ArcReactor active={connected} speaking={voiceActive} size={48} />
-            <div>
-              <span className="text-base font-semibold tracking-widest">JARVIS</span>
-              <div className="flex items-center gap-2 text-xs text-zinc-500 mt-0.5">
-                <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-                {connected ? 'Online' : 'Offline'}
-                {voiceActive && <span className="text-blue-400 animate-pulse">· Speaking</span>}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setVoiceMode(v => !v)}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                voiceMode ? 'border-blue-500 text-blue-400' : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              {voiceMode ? 'Voice On' : 'Voice'}
-            </button>
-            <button
-              onClick={() => setShowDash(d => !d)}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                showDash ? 'border-zinc-400 text-zinc-300' : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              Dashboard
-            </button>
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-          {messages.length === 0 && (
-            <p className="text-zinc-600 text-center mt-20 text-sm">
-              {voiceMode ? 'Press the mic to speak to Jarvis' : 'Say something to Jarvis'}
-            </p>
+    <div
+      ref={ref}
+      role="menu"
+      style={{
+        position: 'fixed',
+        left: x, top: y,
+        background: 'rgba(4,8,18,0.95)',
+        border: '1px solid rgba(0,168,255,0.18)',
+        borderRadius: 8,
+        backdropFilter: 'blur(20px)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 16px rgba(0,168,255,0.06)',
+        overflow: 'hidden',
+        zIndex: 200,
+        minWidth: 160,
+      }}
+    >
+      <div style={{
+        padding: '7px 12px 6px',
+        borderBottom: '1px solid rgba(0,168,255,0.08)',
+        fontFamily: "'Rajdhani','Fira Code',monospace",
+        fontSize: 9,
+        letterSpacing: '0.28em',
+        color: 'rgba(0,168,255,0.45)',
+        textTransform: 'uppercase',
+      }}>
+        JARVIS
+      </div>
+      {items.map(item => (
+        <button
+          key={item.action}
+          role="menuitem"
+          onClick={() => { onAction(item.action); onClose(); }}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            width: '100%',
+            padding: '9px 14px',
+            background: 'none',
+            border: 'none',
+            color: 'rgba(224,240,255,0.8)',
+            fontSize: 12,
+            fontFamily: 'var(--font-mono)',
+            cursor: 'pointer',
+            textAlign: 'left',
+            transition: 'background 0.15s',
+            letterSpacing: '0.04em',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,168,255,0.08)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+        >
+          <span>{item.label}</span>
+          {item.key && (
+            <span style={{ fontSize: 9, color: 'rgba(0,168,255,0.4)', letterSpacing: '0.1em' }}>
+              [{item.key}]
+            </span>
           )}
-          {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[70%] px-4 py-2 rounded-lg text-sm whitespace-pre-wrap ${
-                m.role === 'user' ? 'bg-white text-black' : 'bg-zinc-800 text-white'
-              }`}>
-                {m.content}
-              </div>
-            </div>
-          ))}
-          {loading && (
-            <div className="flex justify-start">
-              <div className="bg-zinc-800 px-4 py-2 rounded-lg text-sm text-zinc-400 animate-pulse">
-                Thinking...
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
+        </button>
+      ))}
+    </div>
+  );
+}
 
-        {/* Input */}
-        <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900 shrink-0">
-          <div className="flex gap-3">
-            <input
-              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
-              placeholder="Message Jarvis..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            />
-            {voiceMode && (
-              <button
-                onClick={voiceActive ? stopVoice : startVoice}
-                className={`w-10 h-10 flex items-center justify-center rounded-full text-base transition-all ${
-                  voiceActive
-                    ? 'bg-red-600 hover:bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)] animate-pulse'
-                    : 'bg-blue-700 hover:bg-blue-600 shadow-[0_0_8px_rgba(59,130,246,0.4)]'
-                }`}
-                title={voiceActive ? 'Stop voice' : 'Start voice'}
-              >
-                {voiceActive ? '■' : '🎙'}
-              </button>
-            )}
-            <button
-              onClick={handleSend}
-              disabled={loading || !connected}
-              className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Send
-            </button>
-          </div>
-        </div>
+export default function HomePage() {
+  const [voiceOrbState, setVoiceOrbState] = useState<OrbState>('idle');
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const widgets = useWidgetManager();
+
+  const handleWidgetCommand = useCallback(
+    (cmd: { action: 'show' | 'hide' | 'toggle'; widget: WidgetId }) => {
+      if (cmd.action === 'show') widgets.show(cmd.widget);
+      else if (cmd.action === 'hide') widgets.hide(cmd.widget);
+      else widgets.toggle(cmd.widget);
+    },
+    [widgets]
+  );
+
+  const {
+    messages, connected, isProcessing,
+    orbState: wsOrbState, serverStatus, sendMessage,
+  } = useJarvisWebSocket({ onWidgetCommand: handleWidgetCommand });
+
+  const { isStreaming, start: startVoice, stop: stopVoice } = useVoiceStream(
+    vs => setVoiceOrbState(vs)
+  );
+
+  const orbState: OrbState = isStreaming ? voiceOrbState : wsOrbState;
+
+  function handleMicToggle() {
+    if (isStreaming) stopVoice();
+    else void startVoice();
+  }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      switch (e.key.toLowerCase()) {
+        case 'c': widgets.toggle('chat');      break;
+        case 's': widgets.toggle('stats');    break;
+        case 'm': widgets.toggle('memory');   break;
+        case 'v': handleMicToggle();          break;
+        case 'p': widgets.spawn('providers'); break;
+        case 'escape':
+          widgets.hide('chat');
+          widgets.hide('stats');
+          widgets.hide('memory');
+          widgets.hide('settings');
+          setCtxMenu(null);
+          break;
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [widgets, isStreaming]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleOrbContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  function handleContextAction(action: string) {
+    widgets.toggle(action as WidgetId);
+  }
+
+  return (
+    <main
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: '#131820',
+        backgroundImage: `
+          linear-gradient(rgba(80,160,220,0.07) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(80,160,220,0.07) 1px, transparent 1px),
+          linear-gradient(rgba(80,160,220,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(80,160,220,0.03) 1px, transparent 1px)
+        `,
+        backgroundSize: '150px 150px, 150px 150px, 30px 30px, 30px 30px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Vignette overlay */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background:
+            'radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(0,0,0,0.55) 100%)',
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}
+      />
+
+      {/* Ambient glow behind orb */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          width: 480,
+          height: 480,
+          borderRadius: '50%',
+          background:
+            orbState === 'idle'      ? 'radial-gradient(circle, rgba(0,100,200,0.10) 0%, transparent 70%)' :
+            orbState === 'listening' ? 'radial-gradient(circle, rgba(0,200,255,0.18) 0%, transparent 70%)' :
+            orbState === 'thinking'  ? 'radial-gradient(circle, rgba(120,80,240,0.18) 0%, transparent 70%)' :
+            orbState === 'speaking'  ? 'radial-gradient(circle, rgba(200,150,0,0.14) 0%, transparent 70%)'  :
+                                       'radial-gradient(circle, rgba(200,50,50,0.12) 0%, transparent 70%)',
+          transition: 'background 1.2s ease',
+          pointerEvents: 'none',
+          zIndex: 2,
+        }}
+      />
+
+      {/* HUD corner brackets */}
+      <HudCorners />
+
+      {/* Connection dot — top-left, always subtle */}
+      <div
+        aria-live="polite"
+        aria-label={connected ? 'JARVIS connected' : 'JARVIS disconnected'}
+        style={{
+          position: 'fixed',
+          top: 22,
+          left: 22,
+          width: 5,
+          height: 5,
+          borderRadius: '50%',
+          background: connected ? '#00ff88' : '#ff4444',
+          boxShadow: connected
+            ? '0 0 5px rgba(0,255,136,0.7)'
+            : '0 0 5px rgba(255,68,68,0.6)',
+          opacity: 0.5,
+          transition: 'all 0.4s ease',
+          zIndex: 10,
+        }}
+      />
+
+      {/* Keyboard hint — faint, top-right */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          top: 22,
+          right: 28,
+          fontFamily: "'Fira Code',monospace",
+          fontSize: 8,
+          letterSpacing: '0.18em',
+          color: 'rgba(0,168,255,0.18)',
+          pointerEvents: 'none',
+          zIndex: 10,
+          userSelect: 'none',
+          textTransform: 'uppercase',
+        }}
+      >
+        C · S · M · V · P · ESC
       </div>
 
-      {/* Dashboard sidebar */}
-      {showDash && (
-        <div className="w-72 shrink-0 border-l border-zinc-800">
-          <Dashboard />
-        </div>
+      {/* Center orb area */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 18,
+          zIndex: 3,
+          position: 'relative',
+        }}
+        onContextMenu={handleOrbContextMenu}
+      >
+        <OrbRing state={orbState} size={340} onClick={handleMicToggle} />
+
+        {/* State label */}
+        <p
+          style={{
+            fontFamily: "'Rajdhani','Fira Code',monospace",
+            fontSize: 9,
+            letterSpacing: '0.42em',
+            textTransform: 'uppercase',
+            color: 'rgba(0,168,255,0.22)',
+            userSelect: 'none',
+            opacity: orbState === 'idle' ? 1 : 0,
+            transition: 'opacity 1.2s ease',
+            marginTop: -4,
+          }}
+          aria-hidden="true"
+        >
+          Awaiting command
+        </p>
+        {orbState !== 'idle' && (
+          <p
+            style={{
+              position: 'absolute',
+              bottom: -24,
+              fontFamily: "'Rajdhani','Fira Code',monospace",
+              fontSize: 9,
+              letterSpacing: '0.38em',
+              textTransform: 'uppercase',
+              color: 'rgba(0,168,255,0.45)',
+              userSelect: 'none',
+              animation: 'fadeInUp 0.3s ease',
+            }}
+            aria-live="polite"
+          >
+            {orbState === 'listening' ? 'Listening...'  :
+             orbState === 'thinking'  ? 'Processing...' :
+             orbState === 'speaking'  ? 'Speaking...'   : 'Error'}
+          </p>
+        )}
+      </div>
+
+      {/* Right-click context menu */}
+      {ctxMenu && (
+        <OrbContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+          onAction={handleContextAction}
+        />
       )}
-    </div>
-  )
+
+      {/* Auto-hide bottom dock */}
+      <BottomDock
+        onToggleWidget={widgets.toggle}
+        activeWidgets={widgets.visibility}
+        isMicOn={isStreaming}
+        onToggleMic={handleMicToggle}
+        onSpawn={widgets.spawn}
+      />
+
+      {/* Floating draggable widgets */}
+      {widgets.visibility.chat && (
+        <DraggableWidget id="chat"
+          defaultX={typeof window !== 'undefined' ? window.innerWidth / 2 - 240 : 200}
+          defaultY={typeof window !== 'undefined' ? window.innerHeight - 520 : 200}
+        >
+          <ChatWidget
+            messages={messages}
+            onSend={sendMessage}
+            onClose={() => widgets.hide('chat')}
+            isProcessing={isProcessing}
+          />
+        </DraggableWidget>
+      )}
+      {widgets.visibility.stats && (
+        <DraggableWidget id="stats" defaultX={24} defaultY={24}>
+          <StatsWidget
+            serverStatus={serverStatus}
+            connected={connected}
+            onClose={() => widgets.hide('stats')}
+          />
+        </DraggableWidget>
+      )}
+      {widgets.visibility.memory && (
+        <DraggableWidget id="memory"
+          defaultX={typeof window !== 'undefined' ? window.innerWidth / 2 - 200 : 200}
+          defaultY={typeof window !== 'undefined' ? window.innerHeight / 2 - 160 : 200}
+        >
+          <MemoryWidget onClose={() => widgets.hide('memory')} />
+        </DraggableWidget>
+      )}
+      {widgets.visibility.settings && (
+        <DraggableWidget id="settings"
+          defaultX={typeof window !== 'undefined' ? window.innerWidth / 2 - 180 : 200}
+          defaultY={typeof window !== 'undefined' ? window.innerHeight / 2 - 200 : 200}
+        >
+          <SettingsWidget onClose={() => widgets.hide('settings')} />
+        </DraggableWidget>
+      )}
+
+      {/* Spawned widget instances */}
+      {widgets.spawned.map((w, i) => {
+        const offset = i * 24;
+        const dx = (typeof window !== 'undefined' ? window.innerWidth  / 2 - 110 : 300) + offset;
+        const dy = (typeof window !== 'undefined' ? window.innerHeight / 2 - 120 : 200) + offset;
+        const inner =
+          w.type === 'clock'   ? <ClockWidget   onClose={() => widgets.despawn(w.instanceId)} /> :
+          w.type === 'notes'   ? <NotesWidget   onClose={() => widgets.despawn(w.instanceId)} /> :
+          w.type === 'sysmon'  ? <SysMonWidget  onClose={() => widgets.despawn(w.instanceId)} /> :
+          w.type === 'graph'   ? <GraphWidget   onClose={() => widgets.despawn(w.instanceId)} /> :
+          w.type === 'webview' ? <WebViewWidget onClose={() => widgets.despawn(w.instanceId)} /> :
+          w.type === 'logs'    ? <LogsWidget    onClose={() => widgets.despawn(w.instanceId)} /> :
+          w.type === 'media'     ? <MediaWidget     onClose={() => widgets.despawn(w.instanceId)} /> :
+          w.type === 'providers' ? <ProvidersWidget /> :
+          null;
+        if (!inner) return null;
+        return (
+          <DraggableWidget key={w.instanceId} id={w.instanceId} defaultX={dx} defaultY={dy}>
+            {inner}
+          </DraggableWidget>
+        );
+      })}
+    </main>
+  );
 }

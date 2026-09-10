@@ -1,0 +1,24 @@
+name: Deploy to Azure VM
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH deploy to Azure VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key:      ${{ secrets.AZURE_SSH_KEY }}
+          port:     22
+          timeout:  120s
+          script: |
+            set -e
+            cd /home/${{ secrets.AZURE_VM_USER }}/jarvis
+            git fetch origin master
+            git reset --hard origin/master
+            bash /home/${{ secrets.AZURE_VM_USER }}/jarvis/deploy/deploy.sh
