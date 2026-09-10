@@ -19,17 +19,19 @@ JARVIS_SYSTEM = (
 )
 
 
-class RawPCMSerializer:
+from pipecat.serializers.base_serializer import FrameSerializer
+from pipecat.frames.frames import Frame, InputAudioRawFrame, OutputAudioRawFrame
+
+
+class RawPCMSerializer(FrameSerializer):
     """Converts raw Int16 PCM bytes ↔ pipecat audio frames (no RTVI/protobuf framing)."""
 
-    async def serialize(self, frame) -> bytes | None:
-        from pipecat.frames.frames import OutputAudioRawFrame
+    async def serialize(self, frame: Frame) -> bytes | None:
         if isinstance(frame, OutputAudioRawFrame):
             return frame.audio
         return None
 
-    async def deserialize(self, data: bytes | str):
-        from pipecat.frames.frames import InputAudioRawFrame
+    async def deserialize(self, data: bytes | str) -> Frame | None:
         if isinstance(data, bytes):
             return InputAudioRawFrame(audio=data, sample_rate=SAMPLE_RATE, num_channels=1)
         return None
