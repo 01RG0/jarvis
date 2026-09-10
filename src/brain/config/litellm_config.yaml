@@ -1,19 +1,454 @@
 model_list:
-  - model_name: fast
+  # ── Fast: Alibaba Qwen Turbo (low latency) ── TESTED OK 2.4s
+  - model_name: jarvis-fast
     litellm_params:
-      model: groq/llama-3.1-8b-instant
-      api_key: ${GROQ_API_KEY}
-  - model_name: balanced
+      model: openai/qwen-turbo
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  # ── Balanced: Alibaba Qwen Plus ──
+  - model_name: jarvis-balanced
     litellm_params:
-      model: gemini/gemini-1.5-flash
-      api_key: ${GEMINI_API_KEY}
-  - model_name: smart
+      model: openai/qwen-plus
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  # ── Smart: Alibaba Qwen Max ──
+  - model_name: jarvis-smart
     litellm_params:
-      model: gemini/gemini-1.5-pro
-      api_key: ${GEMINI_API_KEY}
+      model: openai/qwen-max
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  # ── Vision: Qwen VL Max (multimodal) ── TESTED OK
+  - model_name: jarvis-vision
+    litellm_params:
+      model: openai/qwen-vl-max
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  # ── Coder: Claude Sonnet 4.6 via AWS Bedrock ── TESTED OK 1.5s
+  - model_name: jarvis-coder
+    litellm_params:
+      model: bedrock/us.anthropic.claude-sonnet-4-6
+      aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
+      aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
+      aws_region_name: os.environ/AWS_REGION_NAME
+
+  # ── Reason: Qwen3 235B (largest open model) ── TESTED OK 5s
+  - model_name: jarvis-reason
+    litellm_params:
+      model: openai/qwen3-235b-a22b
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  # ── Alibaba extended: latest Qwen3.8 / DeepSeek / Kimi / GLM lineup ──
+  - model_name: jarvis-ali-flash
+    litellm_params:
+      model: openai/qwen3.8-flash
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-max
+    litellm_params:
+      model: openai/qwen3.8-max-0902
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-think
+    litellm_params:
+      model: openai/qwen3.8-2.4t-a95b
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-coder
+    litellm_params:
+      model: openai/qwen3-coder-next
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-kimi-code
+    litellm_params:
+      model: openai/kimi-k2.7-code
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-kimi
+    litellm_params:
+      model: openai/kimi-k3
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-deepseek-pro
+    litellm_params:
+      model: openai/deepseek-v4-pro
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-deepseek-flash
+    litellm_params:
+      model: openai/deepseek-v4-flash
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-glm
+    litellm_params:
+      model: openai/ZHIPU/GLM-5.3
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-qwq
+    litellm_params:
+      model: openai/qwq-plus
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-vl
+    litellm_params:
+      model: openai/qwen3-vl-235b-a22b-instruct
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-vl-fast
+    litellm_params:
+      model: openai/qwen3-vl-flash
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-omni
+    litellm_params:
+      model: openai/qwen3-omni-flash
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-img-gen
+    litellm_params:
+      model: openai/qwen-image-3.0-pro
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-img-wan
+    litellm_params:
+      model: openai/wan2.7-image-pro
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-tts
+    litellm_params:
+      model: openai/qwen3-tts-instruct-flash
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-stt
+    litellm_params:
+      model: openai/qwen-audio-3.0-asr-flash
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-embed
+    litellm_params:
+      model: openai/text-embedding-v4
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  - model_name: jarvis-ali-translate
+    litellm_params:
+      model: openai/qwen-mt-turbo
+      api_base: os.environ/ALIBABA_BASE_URL
+      api_key: os.environ/ALIBABA_API_KEY
+
+  # ── Cheap: Gemini 2.5 Flash (free tier) ── TESTED OK
+  - model_name: jarvis-cheap
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ── Gemini fallbacks ── TESTED OK
+  - model_name: jarvis-gemini-fast
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: jarvis-gemini-smart
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ── TokenHarbor free DeepSeek ── TESTED OK 1.3s
+  - model_name: jarvis-th-free
+    litellm_params:
+      model: openai/deepseek-v4.1-flash:free
+      api_base: os.environ/TOKEN_HARBOR_BASE_URL
+      api_key: os.environ/TOKEN_HARBOR_API_KEY
+
+  # ── AiHubMix free tier ── TESTED OK 4.3s / 11.2s
+  - model_name: jarvis-aihub-fast
+    litellm_params:
+      model: openai/gpt-4.1-free
+      api_base: os.environ/AIHUBMIX_BASE_URL
+      api_key: os.environ/AIHUBMIX_API_KEY
+
+  - model_name: jarvis-aihub-balanced
+    litellm_params:
+      model: openai/gemini-3.7-flash-free
+      api_base: os.environ/AIHUBMIX_BASE_URL
+      api_key: os.environ/AIHUBMIX_API_KEY
+
+  # ── Cohere — long context + RAG ── TESTED OK 0.3-0.4s
+  - model_name: jarvis-cohere-fast
+    litellm_params:
+      model: cohere/command-r-08-2024
+      api_key: os.environ/COHERE_API_KEY
+
+  - model_name: jarvis-cohere-smart
+    litellm_params:
+      model: cohere/command-r-plus-08-2024
+      api_key: os.environ/COHERE_API_KEY
+
+  - model_name: jarvis-cohere-reason
+    litellm_params:
+      model: cohere/command-a-03-2025
+      api_key: os.environ/COHERE_API_KEY
+
+  # ── Atessa — replaces CodeCraft (which is down) ── TESTED OK
+  - model_name: jarvis-fast-cc
+    litellm_params:
+      model: openai/claude-haiku-4-5-strong
+      api_base: os.environ/ATESSA_BASE_URL
+      api_key: os.environ/ATESSA_API_KEY
+
+  - model_name: jarvis-smart-cc
+    litellm_params:
+      model: openai/claude-opus-5-strong
+      api_base: os.environ/ATESSA_BASE_URL
+      api_key: os.environ/ATESSA_API_KEY
+
+  # ── Groq — fastest inference: GPT-OSS + Qwen3 lineup ── TESTED OK 0.1-0.5s
+  - model_name: jarvis-groq-instant
+    litellm_params:
+      model: groq/openai/gpt-oss-20b
+      api_key: os.environ/GROQ_API_KEY
+
+  - model_name: jarvis-groq-fast
+    litellm_params:
+      model: groq/qwen/qwen3.8-27b
+      api_key: os.environ/GROQ_API_KEY
+
+  - model_name: jarvis-groq-smart
+    litellm_params:
+      model: groq/openai/gpt-oss-120b
+      api_key: os.environ/GROQ_API_KEY
+
+  - model_name: jarvis-groq-compound
+    litellm_params:
+      model: groq/groq/compound-mini
+      api_key: os.environ/GROQ_API_KEY
+
+  # ── Mistral ── codestral TESTED OK 0.2s; small rate-limits on free tier
+  - model_name: jarvis-mistral-fast
+    litellm_params:
+      model: mistral/mistral-small-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
+  - model_name: jarvis-mistral-smart
+    litellm_params:
+      model: mistral/mistral-large-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
+  - model_name: jarvis-mistral-coder
+    litellm_params:
+      model: mistral/codestral-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
+  # ── OpenRouter — paid models tested OK ──
+  - model_name: jarvis-or-cheap
+    litellm_params:
+      model: openrouter/google/gemini-flash-1.5-8b
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: jarvis-or-smart
+    litellm_params:
+      model: openrouter/anthropic/claude-opus-5
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: jarvis-or-vision
+    litellm_params:
+      model: openrouter/google/gemini-2.5-pro
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # ── HuggingFace Serverless Inference ── 70B TESTED OK 1.4s
+  - model_name: jarvis-hf-fast
+    litellm_params:
+      model: huggingface/HuggingFaceH4/zephyr-7b-beta
+      api_key: os.environ/HUGGINGFACE_API_KEY
+
+  - model_name: jarvis-hf-smart
+    litellm_params:
+      model: huggingface/meta-llama/Llama-3.3-70B-Instruct
+      api_key: os.environ/HUGGINGFACE_API_KEY
+
+  # ── AnyAPI — 100+ free models ── TESTED OK
+  - model_name: jarvis-anyapi-fast
+    litellm_params:
+      model: openai/nvidia/nemotron-3-nano-30b-a3b:free
+      api_base: os.environ/ANYAPI_BASE_URL
+      api_key: os.environ/ANYAPI_API_KEY
+
+  - model_name: jarvis-anyapi-smart
+    litellm_params:
+      model: openai/nvidia/nemotron-ultra-550b:free
+      api_base: os.environ/ANYAPI_BASE_URL
+      api_key: os.environ/ANYAPI_API_KEY
+
+  - model_name: jarvis-anyapi-coder
+    litellm_params:
+      model: openai/qwen/qwen3-coder:free
+      api_base: os.environ/ANYAPI_BASE_URL
+      api_key: os.environ/ANYAPI_API_KEY
+
+  # ── Apertis — TESTED OK: deepseek-v4.1-flash, claude-fable-5.1 ──
+  - model_name: jarvis-apertis-fast
+    litellm_params:
+      model: openai/deepseek-v4.1-flash
+      api_base: os.environ/APERTIS_BASE_URL
+      api_key: os.environ/APERTIS_API_KEY
+
+  - model_name: jarvis-apertis-smart
+    litellm_params:
+      model: openai/claude-fable-5.1
+      api_base: os.environ/APERTIS_BASE_URL
+      api_key: os.environ/APERTIS_API_KEY
+
+  - model_name: jarvis-apertis-balanced
+    litellm_params:
+      model: openai/qwen3.8-27b
+      api_base: os.environ/APERTIS_BASE_URL
+      api_key: os.environ/APERTIS_API_KEY
+
+  # ── Atessa — TESTED OK: claude-haiku-4-5-strong, claude-opus-5-strong ──
+  - model_name: jarvis-atessa-fast
+    litellm_params:
+      model: openai/claude-haiku-4-5-strong
+      api_base: os.environ/ATESSA_BASE_URL
+      api_key: os.environ/ATESSA_API_KEY
+
+  - model_name: jarvis-atessa-smart
+    litellm_params:
+      model: openai/claude-opus-5-strong
+      api_base: os.environ/ATESSA_BASE_URL
+      api_key: os.environ/ATESSA_API_KEY
+
+  - model_name: jarvis-atessa-vision
+    litellm_params:
+      model: openai/gemini-3.1-flash-image
+      api_base: os.environ/ATESSA_BASE_URL
+      api_key: os.environ/ATESSA_API_KEY
+
+  # ── Pooled (pooled.dev) — TESTED OK: kimi-k2.5, deepseek-v4-pro ──
+  - model_name: jarvis-pooled-fast
+    litellm_params:
+      model: openai/kimi-k2.5-fallback
+      api_base: os.environ/POOLED_BASE_URL
+      api_key: os.environ/POOLED_API_KEY
+
+  - model_name: jarvis-pooled-smart
+    litellm_params:
+      model: openai/deepseek-v4-pro-official
+      api_base: os.environ/POOLED_BASE_URL
+      api_key: os.environ/POOLED_API_KEY
+
+  - model_name: jarvis-pooled-balanced
+    litellm_params:
+      model: openai/deepseek-v4-flash-official
+      api_base: os.environ/POOLED_BASE_URL
+      api_key: os.environ/POOLED_API_KEY
+
+  # ── Pollinations (gen.pollinations.ai) ── TESTED OK: poll-smart 2.7s, poll-reason 3s
+  - model_name: jarvis-poll-fast
+    litellm_params:
+      model: openai/google/gemini-2.5-flash-lite
+      api_base: https://gen.pollinations.ai/v1
+      api_key: os.environ/POLLINATIONS_API_KEY
+
+  - model_name: jarvis-poll-balanced
+    litellm_params:
+      model: openai/meta/llama-4-maverick
+      api_base: https://gen.pollinations.ai/v1
+      api_key: os.environ/POLLINATIONS_API_KEY
+
+  - model_name: jarvis-poll-smart
+    litellm_params:
+      model: openai/deepseek/deepseek-v4-pro
+      api_base: https://gen.pollinations.ai/v1
+      api_key: os.environ/POLLINATIONS_API_KEY
+
+  - model_name: jarvis-poll-reason
+    litellm_params:
+      model: openai/deepseek/deepseek-v4-flash
+      api_base: https://gen.pollinations.ai/v1
+      api_key: os.environ/POLLINATIONS_API_KEY
+
 router_settings:
+  routing_strategy: latency-based-routing
+  num_retries: 2
+  timeout: 45
   fallbacks:
-    - smart: [balanced, fast]
-    - balanced: [fast]
+    - jarvis-fast:
+        - jarvis-groq-instant
+        - jarvis-gemini-fast
+        - jarvis-groq-fast
+        - jarvis-cohere-fast
+        - jarvis-th-free
+        - jarvis-poll-fast
+        - jarvis-pooled-fast
+    - jarvis-balanced:
+        - jarvis-groq-smart
+        - jarvis-gemini-fast
+        - jarvis-cohere-smart
+        - jarvis-apertis-balanced
+        - jarvis-th-free
+        - jarvis-poll-balanced
+    - jarvis-smart:
+        - jarvis-ali-max
+        - jarvis-gemini-smart
+        - jarvis-mistral-smart
+        - jarvis-groq-smart
+        - jarvis-or-smart
+        - jarvis-poll-smart
+        - jarvis-balanced
+        - jarvis-coder
+    - jarvis-coder:
+        - jarvis-ali-coder
+        - jarvis-ali-kimi-code
+        - jarvis-mistral-coder
+        - jarvis-anyapi-coder
+        - jarvis-smart
+        - jarvis-gemini-smart
+        - jarvis-smart-cc
+        - jarvis-or-smart
+    - jarvis-reason:
+        - jarvis-ali-think
+        - jarvis-ali-qwq
+        - jarvis-cohere-reason
+        - jarvis-ali-deepseek-pro
+        - jarvis-poll-reason
+        - jarvis-groq-smart
+        - jarvis-pooled-smart
+        - jarvis-smart
+        - jarvis-coder
+    - jarvis-vision:
+        - jarvis-or-vision
+        - jarvis-atessa-vision
+        - jarvis-gemini-fast
+        - jarvis-balanced
+    - jarvis-cheap:
+        - jarvis-groq-instant
+        - jarvis-cohere-fast
+        - jarvis-anyapi-fast
+        - jarvis-poll-fast
+        - jarvis-or-cheap
+        - jarvis-th-free
+        - jarvis-pooled-fast
+        - jarvis-fast
   allowed_fails: 2
   cooldown_time: 60

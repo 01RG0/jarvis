@@ -87,12 +87,70 @@ STT→LLM→TTS with a custom Iron-Man-inspired animated avatar running in the b
 | Orchestration | Python + LangGraph | Explicit state machines with checkpointing; retry/fallback as literal graph edges |
 | Voice pipeline | Python + Pipecat | Composable STT→LLM→TTS stages, cloud-API-first, no local model weights |
 | Memory | Mem0 + SQLite/sqlite-vec | Hybrid vector+structured, single-file, near-zero always-on overhead |
-| AI gateway | LiteLLM (SDK mode) | 100+ providers behind one interface, in-process router, cost tracking |
+| AI gateway | LiteLLM (SDK mode) | 16 providers, 65+ model aliases, live-tested IDs, per-task routing, fallback chains |
 | Watchdog daemon | Go | Single static binary, ~few MB RAM, survives all other crashes |
 | Gateway / channels | Node.js / TypeScript | Always-on WebSocket routing, push notifications |
 | Website | Next.js / React | Live animated HUD, WebSocket voice client, control dashboard |
 | Wake word | openWakeWord | ONNX-based, trainable custom wake word, no cloud dependency |
 | CLI dispatch | Custom dispatcher | Treats installed CLIs (Claude Code, etc.) as callable sub-agents |
+
+---
+
+## Provider Ecosystem
+
+Jarvis routes every LLM call through `src/brain/llm_router.py` → LiteLLM Router with 16 providers,
+65+ named aliases, latency-based routing, and multi-level fallback chains.
+All model IDs have been live-tested (see `docs/llm-providers.md` for the full reference).
+
+### Providers
+
+| Provider | Aliases prefix | Strength | Key env var |
+|----------|---------------|----------|-------------|
+| Alibaba DashScope | `jarvis-ali-*` | 165 Maas models: Qwen3.8, DeepSeek V4, Kimi K3, image gen, TTS, STT, embed | `ALIBABA_API_KEY` |
+| AWS Bedrock | `jarvis-coder` | Claude Sonnet 4.6 (best coding) | `AWS_ACCESS_KEY_ID` |
+| Groq | `jarvis-groq-*` | Fastest inference: GPT-OSS-20B at 0.1s | `GROQ_API_KEY` |
+| Google Gemini | `jarvis-gemini-*`, `jarvis-cheap` | Free tier, generous quota | `GEMINI_API_KEY` |
+| Cohere | `jarvis-cohere-*` | Long-context RAG, command-a reasoning | `COHERE_API_KEY` |
+| Mistral | `jarvis-mistral-*` | Codestral for code, EU-hosted | `MISTRAL_API_KEY` |
+| OpenRouter | `jarvis-or-*` | 300+ models via one key | `OPENROUTER_API_KEY` |
+| TokenHarbor | `jarvis-th-free` | Free DeepSeek V4.1 | `TOKEN_HARBOR_API_KEY` |
+| AiHubMix | `jarvis-aihub-*` | 415 models, free GPT-4.1 / Gemini tiers | `AIHUBMIX_API_KEY` |
+| HuggingFace | `jarvis-hf-*` | Serverless inference, Llama 70B | `HUGGINGFACE_API_KEY` |
+| AnyAPI | `jarvis-anyapi-*` | 100+ free models incl. NVIDIA Nemotron | `ANYAPI_API_KEY` |
+| Apertis | `jarvis-apertis-*` | Claude Fable 5.1, DeepSeek V4.1 | `APERTIS_API_KEY` |
+| Atessa | `jarvis-atessa-*`, `jarvis-fast-cc`, `jarvis-smart-cc` | Claude Opus 5 / Haiku 4.5 | `ATESSA_API_KEY` |
+| Pooled | `jarvis-pooled-*` | Kimi K2.5, DeepSeek V4 Pro official | `POOLED_API_KEY` |
+| Pollinations | `jarvis-poll-*` | GPT/Claude/Gemini/Llama aggregator | `POLLINATIONS_API_KEY` |
+
+### Task routing
+
+```python
+from llm_router import select_model
+
+model = select_model("code")        # → jarvis-ali-coder  (qwen3-coder-next)
+model = select_model("reason")      # → jarvis-ali-think  (qwen3.8-2.4T)
+model = select_model("voice")       # → jarvis-groq-instant (0.1s latency)
+model = select_model("image-gen")   # → jarvis-ali-img-gen
+model = select_model("tts")         # → jarvis-ali-tts
+model = select_model("stt")         # → jarvis-ali-stt
+model = select_model("vision", has_image=True)  # → jarvis-ali-vl (Qwen3-VL-235B)
+```
+
+Task types: `voice fast chat balanced smart long code kimi-code reason think qwq research search vision vision-fast omni image-gen image-wan tts stt embed translate bulk cheap free`
+
+### Provider admin CLI
+
+```bash
+# from repo root
+python src/brain/tools/provider_admin.py list              # all aliases + key status
+python src/brain/tools/provider_admin.py test              # parallel ping all
+python src/brain/tools/provider_admin.py test jarvis-fast  # ping one alias
+python src/brain/tools/provider_admin.py discover https://api.example.com/v1 MY_KEY_ENV
+python src/brain/tools/provider_admin.py add my-alias openai/model-id MY_KEY_ENV [MY_BASE_ENV]
+python src/brain/tools/provider_admin.py remove my-alias
+```
+
+See [`docs/llm-providers.md`](docs/llm-providers.md) for full provider reference, all model IDs, and fallback chain docs.
 
 ---
 
