@@ -20,12 +20,21 @@ JARVIS_SYSTEM = (
 )
 
 
+import json
+from typing import Callable
+
 from pipecat.serializers.base_serializer import FrameSerializer
 from pipecat.frames.frames import Frame, InputAudioRawFrame, OutputAudioRawFrame
 
+VALID_VOICES = {'autumn', 'diana', 'hannah', 'austin', 'daniel', 'troy'}
+
 
 class RawPCMSerializer(FrameSerializer):
-    """Converts raw Int16 PCM bytes ↔ pipecat audio frames (no RTVI/protobuf framing)."""
+    """Converts raw Int16 PCM bytes ↔ pipecat audio frames (no RTVI/protobuf framing).
+    Also handles the JSON voice-config message the browser sends on connect."""
+
+    def __init__(self, on_voice_config: Callable[[str], None] | None = None) -> None:
+        self._on_voice_config = on_voice_config
 
     async def serialize(self, frame: Frame) -> bytes | None:
         if isinstance(frame, OutputAudioRawFrame):
@@ -33,6 +42,16 @@ class RawPCMSerializer(FrameSerializer):
         return None
 
     async def deserialize(self, data: bytes | str) -> Frame | None:
+        if isinstance(data, str):
+            try:
+                msg = json.loads(data)
+                if msg.get('type') == 'config':
+                    voice = msg.get('voice', '')
+                    if voice in VALID_VOICES and self._on_voice_config:
+                        self._on_voice_config(voice)
+            except Exception:
+                pass
+            return None
         if isinstance(data, bytes):
             return InputAudioRawFrame(audio=data, sample_rate=SAMPLE_RATE, num_channels=1)
         return None
@@ -60,18 +79,35 @@ async def _run_session() -> None:
 
         groq_key = os.environ.get('GROQ_API_KEY', '')
 
+        # tts_holder lets the voice-config callback reach the TTS service after it's created
+        tts_holder: list = []
+
+        def _on_voice_config(voice: str) -> None:
+            if not tts_holder:
+                return
+            try:
+                from pipecat.services.groq.tts import GroqTTSService
+                tts_holder[0].update_settings(GroqTTSService.Settings(
+                    model=os.environ.get('GROQ_TTS_MODEL', 'canopylabs/orpheus-v1-english'),
+                    voice=voice,
+                ))
+                logger.info('Voice switched to %s', voice)
+            except Exception as exc:
+                logger.warning('Failed to switch voice: %s', exc)
+
         transport = SingleClientWebsocketServerTransport(
             host='0.0.0.0',
             port=VOICE_WS_PORT,
             params=SingleClientWebsocketServerParams(
                 audio_out_enabled=True,
                 audio_in_enabled=True,
-                serializer=RawPCMSerializer(),
+                serializer=RawPCMSerializer(on_voice_config=_on_voice_config),
             ),
         )
 
         stt = get_stt_service()
         tts = get_tts_service()
+        tts_holder.append(tts)
         llm = GroqLLMService(
             api_key=groq_key,
             settings=GroqLLMService.Settings(model=VOICE_LLM_MODEL),

@@ -12,9 +12,12 @@ function getVoiceUrl(): string {
   return 'wss://localhost/voice-pipeline/';
 }
 
-const SAMPLE_RATE = 16000;
-const CHUNK_MS = 100;
+const MIC_SAMPLE_RATE = 16000;   // what we capture and send to STT
+const TTS_SAMPLE_RATE = 24000;   // what Groq Orpheus outputs
 const RECONNECT_DELAY_MS = 3000;
+
+const VOICES = ['autumn', 'diana', 'hannah', 'austin', 'daniel', 'troy'] as const;
+type VoiceName = typeof VOICES[number];
 
 type Status = 'idle' | 'listening' | 'processing' | 'speaking' | 'error' | 'reconnecting';
 
@@ -49,18 +52,28 @@ export default function VoicePage() {
   const [lines, setLines]           = useState<Line[]>([]);
   const [micAllowed, setMicAllowed] = useState<boolean | null>(null);
   const [muted, setMuted]           = useState(false);
+  const [voice, setVoice]           = useState<VoiceName>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('jarvis-voice') as VoiceName | null;
+      if (saved && VOICES.includes(saved)) return saved;
+    }
+    return 'daniel';
+  });
 
-  const wsRef         = useRef<WebSocket | null>(null);
-  const audioCtxRef   = useRef<AudioContext | null>(null);
-  const sourceRef     = useRef<MediaStreamAudioSourceNode | null>(null);
-  const processorRef  = useRef<ScriptProcessorNode | null>(null);
-  const streamRef     = useRef<MediaStream | null>(null);
-  const bottomRef     = useRef<HTMLDivElement>(null);
-  const mutedRef      = useRef(false);
-  const activeRef     = useRef(false);       // user has enabled mic
+  const wsRef          = useRef<WebSocket | null>(null);
+  const audioCtxRef    = useRef<AudioContext | null>(null);
+  const sourceRef      = useRef<MediaStreamAudioSourceNode | null>(null);
+  const processorRef   = useRef<ScriptProcessorNode | null>(null);
+  const streamRef      = useRef<MediaStream | null>(null);
+  const bottomRef      = useRef<HTMLDivElement>(null);
+  const mutedRef       = useRef(false);
+  const activeRef      = useRef(false);
+  const nextPlayRef    = useRef(0);          // next scheduled TTS start time (seconds)
   const reconnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const voiceRef = useRef<VoiceName>(voice);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => { voiceRef.current = voice; localStorage.setItem('jarvis-voice', voice); }, [voice]);
 
   function addLine(role: 'user' | 'jarvis', text: string) {
     setLines(prev => [...prev.slice(-49), { id: ++_lid, role, text }]);
@@ -81,14 +94,14 @@ export default function VoicePage() {
     if (processorRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { sampleRate: SAMPLE_RATE, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        audio: { sampleRate: MIC_SAMPLE_RATE, channelCount: 1, echoCancellation: true, noiseSuppression: true },
         video: false,
       });
       streamRef.current = stream;
       const ctx = audioCtxRef.current!;
       const src = ctx.createMediaStreamSource(stream);
       sourceRef.current = src;
-      const proc = ctx.createScriptProcessor(2048, 1, 1);  // must be power-of-2; 2048 ≈ 128ms @ 16kHz
+      const proc = ctx.createScriptProcessor(2048, 1, 1);  // power-of-2; 2048 ≈ 128ms @ 16kHz
       processorRef.current = proc;
       proc.onaudioprocess = (e) => {
         if (mutedRef.current) return;
@@ -101,7 +114,11 @@ export default function VoicePage() {
         wsRef.current.send(int16.buffer);
       };
       src.connect(proc);
-      proc.connect(ctx.destination);
+      // Route through a muted gain node — keeps the audio graph active without echoing mic to speakers
+      const sink = ctx.createGain();
+      sink.gain.value = 0;
+      proc.connect(sink);
+      sink.connect(ctx.destination);
     } catch (err) {
       console.error('[voice] mic/audio init failed:', err);
       setStatus('error');
@@ -122,7 +139,9 @@ export default function VoicePage() {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      nextPlayRef.current = 0;
       setStatus('listening');
+      ws.send(JSON.stringify({ type: 'config', voice: voiceRef.current }));
       startAudio();
     };
 
@@ -167,13 +186,24 @@ export default function VoicePage() {
     const int16   = new Int16Array(buffer);
     const float32 = new Float32Array(int16.length);
     for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
-    const ab  = ctx.createBuffer(1, float32.length, SAMPLE_RATE);
+    // TTS_SAMPLE_RATE (24kHz) — must match Groq Orpheus output, not mic input rate
+    const ab  = ctx.createBuffer(1, float32.length, TTS_SAMPLE_RATE);
     ab.getChannelData(0).set(float32);
     const src = ctx.createBufferSource();
     src.buffer = ab;
     src.connect(ctx.destination);
-    src.start();
-    src.onended = () => setStatus(s => s === 'speaking' ? 'listening' : s);
+    // Schedule chunks sequentially — never let two chunks overlap or start at "now"
+    const now = ctx.currentTime;
+    const startAt = Math.max(nextPlayRef.current, now + 0.02);
+    src.start(startAt);
+    nextPlayRef.current = startAt + ab.duration;
+    src.onended = () => {
+      // Only transition to listening once the whole TTS response has finished
+      if (nextPlayRef.current <= ctx.currentTime + 0.05) {
+        nextPlayRef.current = 0;
+        setStatus(s => s === 'speaking' ? 'listening' : s);
+      }
+    };
   }
 
   // ── Init / cleanup ────────────────────────────────────────────────────────
@@ -184,7 +214,7 @@ export default function VoicePage() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       stream.getTracks().forEach(t => t.stop());
       setMicAllowed(true);
-      audioCtxRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
+      audioCtxRef.current = new AudioContext({ sampleRate: MIC_SAMPLE_RATE });
       activeRef.current   = true;
       connect();
     } catch (err) {
@@ -247,6 +277,29 @@ export default function VoicePage() {
       {/* Status */}
       <div style={{ fontSize: 11, letterSpacing: '0.4em', color: orb }}>
         {muted && status === 'listening' ? 'MUTED' : STATUS_LABEL[status]}
+      </div>
+
+      {/* Voice selector — available before mic is enabled */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {VOICES.map(v => (
+          <button
+            key={v}
+            onClick={() => setVoice(v)}
+            style={{
+              background: voice === v ? 'rgba(0,168,255,0.18)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${voice === v ? 'rgba(0,168,255,0.5)' : 'rgba(255,255,255,0.08)'}`,
+              borderRadius: 6,
+              color: voice === v ? 'rgba(0,168,255,0.9)' : 'rgba(148,163,184,0.5)',
+              padding: '5px 12px',
+              fontSize: 9,
+              letterSpacing: '0.25em',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+            }}
+          >
+            {v}
+          </button>
+        ))}
       </div>
 
       {/* Permission gate */}
