@@ -16,8 +16,10 @@ def get_tts_service():
         from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
         return ElevenLabsTTSService(
             api_key=api_key,
-            voice_id=os.environ.get('ELEVENLABS_VOICE_ID', _DEFAULT_VOICE_ID),
-            model=os.environ.get('ELEVENLABS_MODEL', 'eleven_turbo_v2_5'),
+            settings=ElevenLabsTTSService.Settings(
+                voice=os.environ.get('ELEVENLABS_VOICE_ID', _DEFAULT_VOICE_ID),
+                model=os.environ.get('ELEVENLABS_MODEL', 'eleven_turbo_v2_5'),
+            ),
         )
     elif provider == 'cartesia':
         api_key = os.environ.get('CARTESIA_API_KEY')
