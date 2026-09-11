@@ -19,6 +19,16 @@ fi
 echo "==> Restarting brain service..."
 sudo systemctl restart jarvis-brain
 
+echo "==> Installing brain service..."
+sudo cp "$JARVIS_DIR/deploy/jarvis-brain.service" /etc/systemd/system/jarvis-brain@rootuser.service
+sudo systemctl daemon-reload
+
+sleep 5
+if ! sudo systemctl is-active --quiet jarvis-brain@rootuser 2>/dev/null && ! sudo systemctl is-active --quiet jarvis-brain 2>/dev/null; then
+  echo "ERROR: jarvis-brain failed to start" >&2
+  sudo journalctl -u jarvis-brain -n 30 --no-pager >&2 || true
+fi
+
 # ── Voice pipeline ────────────────────────────────────────────────────────────
 echo "==> Installing voice deps..."
 VENV_VOICE="$JARVIS_DIR/.venv-voice"
