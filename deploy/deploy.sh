@@ -13,8 +13,8 @@ VENV="$JARVIS_DIR/.venv"
 if [ ! -d "$VENV" ]; then
     python3 -m venv "$VENV"
 fi
-"$VENV/bin/python" -m pip install -q --upgrade pip
-"$VENV/bin/python" -m pip install -q -r requirements.txt
+"$VENV/bin/python" -m pip install -q --no-cache-dir --upgrade pip
+"$VENV/bin/python" -m pip install -q --no-cache-dir -r requirements.txt
 
 echo "==> Restarting brain service..."
 sudo systemctl restart jarvis-brain
@@ -32,9 +32,10 @@ fi
 # ── Voice pipeline ────────────────────────────────────────────────────────────
 echo "==> Installing voice deps..."
 VENV_VOICE="$JARVIS_DIR/.venv-voice"
+python3 -m pip cache purge 2>/dev/null || true
 python3 -m venv --clear "$VENV_VOICE"
-"$VENV_VOICE/bin/python" -m pip install -q --upgrade pip
-"$VENV_VOICE/bin/python" -m pip install -q -r "$JARVIS_DIR/src/voice/requirements.txt"
+"$VENV_VOICE/bin/python" -m pip install -q --no-cache-dir --upgrade pip
+"$VENV_VOICE/bin/python" -m pip install -q --no-cache-dir -r "$JARVIS_DIR/src/voice/requirements.txt"
 
 echo "==> Restarting voice service..."
 sudo systemctl restart jarvis-voice
