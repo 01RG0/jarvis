@@ -86,6 +86,16 @@ export function useJarvisWebSocket(options?: UseJarvisWebSocketOptions) {
       try {
         const data = JSON.parse(e.data as string) as Record<string, unknown>;
 
+        // Server status heartbeat
+        if (data.type === 'status') {
+          setServerStatus(s => ({
+            ...s,
+            uptime_seconds: typeof data.uptime_seconds === 'number' ? data.uptime_seconds : s.uptime_seconds,
+            active_tasks: typeof data.active_tasks === 'number' ? data.active_tasks : s.active_tasks,
+          }))
+          return
+        }
+
         // Widget control messages
         if (
           data.type === 'widget' &&
