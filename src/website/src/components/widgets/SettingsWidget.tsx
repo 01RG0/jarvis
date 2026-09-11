@@ -5,6 +5,9 @@ import { X, Volume2, Mic, Palette } from 'lucide-react';
 
 type TtsProvider = 'piper' | 'kokoro' | 'elevenlabs' | 'cartesia' | 'fish_audio';
 
+const ORPHEUS_VOICES = ['autumn', 'diana', 'hannah', 'austin', 'daniel', 'troy'] as const;
+type OrpheusVoice = typeof ORPHEUS_VOICES[number];
+
 interface Theme { label: string; ring: string; bg: string; cssVar: string }
 
 const THEMES: Theme[] = [
@@ -29,6 +32,9 @@ export default function SettingsWidget({ onClose }: SettingsWidgetProps) {
   const [voiceMode, setVoiceMode] = useState(
     () => ls('jarvis_voice_mode') === 'true'
   );
+  const [orpheusVoice, setOrpheusVoice] = useState<OrpheusVoice>(
+    () => (ls('jarvis-voice') as OrpheusVoice | null) ?? 'daniel'
+  );
   const [brightness, setBrightness] = useState(
     () => Number(ls('jarvis_brightness') ?? 100)
   );
@@ -38,6 +44,7 @@ export default function SettingsWidget({ onClose }: SettingsWidgetProps) {
 
   useEffect(() => { localStorage.setItem('jarvis_tts', ttsProvider); }, [ttsProvider]);
   useEffect(() => { localStorage.setItem('jarvis_voice_mode', String(voiceMode)); }, [voiceMode]);
+  useEffect(() => { localStorage.setItem('jarvis-voice', orpheusVoice); }, [orpheusVoice]);
   useEffect(() => { localStorage.setItem('jarvis_brightness', String(brightness)); }, [brightness]);
   useEffect(() => { localStorage.setItem('jarvis_theme', String(theme)); }, [theme]);
 
@@ -180,6 +187,42 @@ export default function SettingsWidget({ onClose }: SettingsWidgetProps) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Orpheus voice picker */}
+        <div>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontSize: 11, color: 'rgba(0,200,255,0.55)',
+            fontFamily: 'var(--font-mono)', letterSpacing: '0.12em',
+            textTransform: 'uppercase', marginBottom: 8,
+          }}>
+            <Mic size={12} /> JARVIS Voice
+          </label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {ORPHEUS_VOICES.map(v => (
+              <button
+                key={v}
+                onClick={() => setOrpheusVoice(v)}
+                aria-pressed={orpheusVoice === v}
+                style={{
+                  background:  orpheusVoice === v ? 'rgba(0,200,255,0.15)' : 'rgba(255,255,255,0.03)',
+                  border:      orpheusVoice === v ? '1px solid rgba(0,200,255,0.4)' : '1px solid rgba(255,255,255,0.07)',
+                  borderRadius: 6,
+                  color:       orpheusVoice === v ? '#00c8ff' : 'rgba(255,255,255,0.4)',
+                  padding: '5px 11px', fontSize: 11,
+                  fontFamily: 'var(--font-mono)', letterSpacing: '0.08em',
+                  cursor: 'pointer', transition: 'all 0.15s ease',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <p style={{ marginTop: 5, fontSize: 10, color: 'rgba(255,255,255,0.2)', fontFamily: 'var(--font-mono)' }}>
+            Takes effect on next voice session
+          </p>
         </div>
 
         {/* Voice mode toggle */}
