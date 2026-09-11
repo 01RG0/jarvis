@@ -44,7 +44,7 @@ def get_tts_service():
             api_key=api_key,
             settings=GroqTTSService.Settings(
                 model=os.environ.get('GROQ_TTS_MODEL', 'canopylabs/orpheus-v1-english'),
-                voice=os.environ.get('GROQ_TTS_VOICE', 'tara'),
+                voice=os.environ.get('GROQ_TTS_VOICE', 'daniel'),
             ),
         )
     else:
