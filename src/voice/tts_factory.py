@@ -9,7 +9,7 @@ _DEFAULT_VOICE_ID = 'pqHfZKP75CvOlQylNhV4'
 
 
 def get_tts_service():
-    provider = os.environ.get('TTS_PROVIDER', 'groq')
+    provider = os.environ.get('TTS_PROVIDER', 'elevenlabs')
     if provider == 'elevenlabs':
         api_key = os.environ.get('ELEVENLABS_API_KEY')
         assert api_key, 'ELEVENLABS_API_KEY is required when TTS_PROVIDER=elevenlabs'
