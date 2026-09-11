@@ -32,9 +32,7 @@ fi
 # ── Voice pipeline ────────────────────────────────────────────────────────────
 echo "==> Installing voice deps..."
 VENV_VOICE="$JARVIS_DIR/.venv-voice"
-if [ ! -d "$VENV_VOICE" ]; then
-    python3 -m venv "$VENV_VOICE"
-fi
+python3 -m venv --clear "$VENV_VOICE"
 "$VENV_VOICE/bin/python" -m pip install -q --upgrade pip
 "$VENV_VOICE/bin/python" -m pip install -q -r "$JARVIS_DIR/src/voice/requirements.txt"
 
