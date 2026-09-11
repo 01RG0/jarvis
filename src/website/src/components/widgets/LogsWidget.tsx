@@ -28,15 +28,11 @@ const levelColor: Record<LogLine['level'], string> = {
   DEBUG: 'rgba(148,163,184,0.5)',
 };
 
-function getBrainWsBase(): string {
-  if (process.env.NEXT_PUBLIC_BRAIN_URL) return process.env.NEXT_PUBLIC_BRAIN_URL.replace(/^http/, 'ws');
-  if (typeof window !== 'undefined') {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${window.location.host}`;
-  }
-  return 'ws://localhost:8001';
+function getBrainWsUrl(): string {
+  if (process.env.NEXT_PUBLIC_BRAIN_URL) return process.env.NEXT_PUBLIC_BRAIN_URL.replace(/^http/, 'ws') + '/ws/logs';
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws/logs`;
 }
-const WS_URL = `${getBrainWsBase()}/ws/logs`;
 
 export default function LogsWidget({ onClose }: { onClose: () => void }) {
   const [lines, setLines] = useState<LogLine[]>([
@@ -57,7 +53,7 @@ export default function LogsWidget({ onClose }: { onClose: () => void }) {
 
     function connect() {
       if (dead) return;
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(getBrainWsUrl());
       wsRef.current = ws;
 
       ws.onopen = () => {

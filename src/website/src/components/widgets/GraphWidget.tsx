@@ -12,15 +12,11 @@ const SERIES_DEFS: Omit<Series, 'values'>[] = [
 ];
 
 const MAX_POINTS = 60;
-function getBrainWsBase(): string {
-  if (process.env.NEXT_PUBLIC_BRAIN_URL) return process.env.NEXT_PUBLIC_BRAIN_URL.replace(/^http/, 'ws');
-  if (typeof window !== 'undefined') {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${window.location.host}`;
-  }
-  return 'ws://localhost:8001';
+function getBrainWsUrl(): string {
+  if (process.env.NEXT_PUBLIC_BRAIN_URL) return process.env.NEXT_PUBLIC_BRAIN_URL.replace(/^http/, 'ws') + '/ws/stats';
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws/stats`;
 }
-const WS_URL = `${getBrainWsBase()}/ws/stats`;
 
 export default function GraphWidget({ onClose }: { onClose: () => void }) {
   const [series, setSeries] = useState<Series[]>(() =>
@@ -34,7 +30,7 @@ export default function GraphWidget({ onClose }: { onClose: () => void }) {
   // Real data from brain WebSocket
   useEffect(() => {
     function connect() {
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(getBrainWsUrl());
       wsRef.current = ws;
       ws.onmessage = (e) => {
         try {
