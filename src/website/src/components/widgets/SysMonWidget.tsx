@@ -24,8 +24,15 @@ function toRows(s: Stats): SysStat[] {
   ];
 }
 
-const BRAIN_WS = (process.env.NEXT_PUBLIC_BRAIN_URL || 'http://localhost:8001').replace(/^http/, 'ws');
-const WS_URL = `${BRAIN_WS}/ws/stats`;
+function getBrainWsBase(): string {
+  if (process.env.NEXT_PUBLIC_BRAIN_URL) return process.env.NEXT_PUBLIC_BRAIN_URL.replace(/^http/, 'ws');
+  if (typeof window !== 'undefined') {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}`;
+  }
+  return 'ws://localhost:8001';
+}
+const WS_URL = `${getBrainWsBase()}/ws/stats`;
 
 export default function SysMonWidget({ onClose }: { onClose: () => void }) {
   const [stats, setStats] = useState<SysStat[] | null>(null);
