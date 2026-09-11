@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import traceback
 
 from dotenv import load_dotenv
 
@@ -38,65 +39,67 @@ class RawPCMSerializer(FrameSerializer):
 
 
 async def _run_session() -> None:
-    from pipecat.audio.vad.silero import SileroVADAnalyzer
-    from pipecat.pipeline.pipeline import Pipeline
-    from pipecat.pipeline.runner import PipelineRunner
-    from pipecat.pipeline.task import PipelineParams, PipelineTask
-    from pipecat.services.groq.llm import GroqLLMService
-    from pipecat.processors.aggregators.llm_context import LLMContext
-    from pipecat.processors.aggregators.llm_response_universal import (
-        LLMUserAggregator,
-        LLMAssistantAggregator,
-        LLMUserAggregatorParams,
-        LLMAssistantAggregatorParams,
-    )
-    from pipecat.transports.websocket.server import (
-        SingleClientWebsocketServerParams,
-        SingleClientWebsocketServerTransport,
-    )
+    try:
+        from pipecat.audio.vad.silero import SileroVADAnalyzer
+        from pipecat.pipeline.pipeline import Pipeline
+        from pipecat.pipeline.worker import PipelineParams, PipelineWorker
+        from pipecat.workers.runner import WorkerRunner
+        from pipecat.services.groq.llm import GroqLLMService
+        from pipecat.processors.aggregators.llm_context import LLMContext
+        from pipecat.processors.aggregators.llm_response_universal import (
+            LLMContextAggregatorPair,
+        )
+        from pipecat.transports.websocket.server import (
+            SingleClientWebsocketServerParams,
+            SingleClientWebsocketServerTransport,
+        )
 
-    from stt_factory import get_stt_service
-    from tts_factory import get_tts_service
+        from stt_factory import get_stt_service
+        from tts_factory import get_tts_service
 
-    groq_key = os.environ.get('GROQ_API_KEY', '')
+        groq_key = os.environ.get('GROQ_API_KEY', '')
 
-    transport = SingleClientWebsocketServerTransport(
-        host='0.0.0.0',
-        port=VOICE_WS_PORT,
-        params=SingleClientWebsocketServerParams(
-            audio_out_enabled=True,
-            audio_in_enabled=True,
-            vad_enabled=True,
-            vad_analyzer=SileroVADAnalyzer(),
-            vad_audio_passthrough=True,
-            serializer=RawPCMSerializer(),
-        ),
-    )
+        transport = SingleClientWebsocketServerTransport(
+            host='0.0.0.0',
+            port=VOICE_WS_PORT,
+            params=SingleClientWebsocketServerParams(
+                audio_out_enabled=True,
+                audio_in_enabled=True,
+                vad_enabled=True,
+                vad_analyzer=SileroVADAnalyzer(),
+                vad_audio_passthrough=True,
+                serializer=RawPCMSerializer(),
+            ),
+        )
 
-    stt = get_stt_service()
-    tts = get_tts_service()
-    llm = GroqLLMService(
-        api_key=groq_key,
-        settings=GroqLLMService.Settings(model=VOICE_LLM_MODEL),
-    )
+        stt = get_stt_service()
+        tts = get_tts_service()
+        llm = GroqLLMService(
+            api_key=groq_key,
+            settings=GroqLLMService.Settings(model=VOICE_LLM_MODEL),
+        )
 
-    context = LLMContext(messages=[{'role': 'system', 'content': JARVIS_SYSTEM}])
-    user_agg = LLMUserAggregator(context, params=LLMUserAggregatorParams())
-    assistant_agg = LLMAssistantAggregator(context, params=LLMAssistantAggregatorParams())
+        context = LLMContext(messages=[{'role': 'system', 'content': JARVIS_SYSTEM}])
+        user_agg, assistant_agg = LLMContextAggregatorPair(context)
 
-    pipeline = Pipeline([
-        transport.input(),
-        stt,
-        user_agg,
-        llm,
-        tts,
-        transport.output(),
-        assistant_agg,
-    ])
+        pipeline = Pipeline([
+            transport.input(),
+            stt,
+            user_agg,
+            llm,
+            tts,
+            transport.output(),
+            assistant_agg,
+        ])
 
-    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
-    runner = PipelineRunner()
-    await runner.run(task)
+        worker = PipelineWorker(pipeline, params=PipelineParams())
+        runner = WorkerRunner(handle_sigint=False)
+        await runner.add_workers(worker)
+        await runner.run()
+
+    except Exception:
+        logger.error('Session crashed:\n%s', traceback.format_exc())
+        raise
 
 
 async def run_pipeline() -> None:
