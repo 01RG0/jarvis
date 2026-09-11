@@ -42,7 +42,10 @@ def get_tts_service():
         from pipecat.services.groq.tts import GroqTTSService
         return GroqTTSService(
             api_key=api_key,
-            settings=GroqTTSService.Settings(model='playai-tts', voice='Fritz-PlayAI'),
+            settings=GroqTTSService.Settings(
+                model=os.environ.get('GROQ_TTS_MODEL', 'canopylabs/orpheus-v1-english'),
+                voice=os.environ.get('GROQ_TTS_VOICE', 'tara'),
+            ),
         )
     else:
         raise ValueError(
