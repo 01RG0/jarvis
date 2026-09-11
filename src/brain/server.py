@@ -165,8 +165,13 @@ def _normalize_result(raw, default_model: str, elapsed_ms: int) -> tuple[str, st
 
 @app.post("/task", response_model=TaskResponse)
 async def submit_task(task: TaskRequest) -> TaskResponse:
+    from fastapi import HTTPException
     start = time.perf_counter()
-    raw = await handle_task(task.id, task.input, task.model)
+    try:
+        raw = await handle_task(task.id, task.input, task.model)
+    except Exception as exc:
+        logging.exception("handle_task failed for input=%r", task.input[:120])
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 
     result, model_used, cost_usd, duration_ms = _normalize_result(

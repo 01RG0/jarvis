@@ -4,7 +4,14 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { ChatMessage, OrbState, ServerStatus } from '@/lib/types';
 import { WidgetId } from '@/hooks/useWidgetManager';
 
-const GW_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'ws://localhost:8080';
+function getGatewayUrl(): string {
+  if (process.env.NEXT_PUBLIC_GATEWAY_URL) return process.env.NEXT_PUBLIC_GATEWAY_URL;
+  if (typeof window !== 'undefined') {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}/gateway`;
+  }
+  return 'ws://localhost:8080';
+}
 
 let audioCtxRef: AudioContext | null = null;
 
@@ -48,7 +55,7 @@ export function useJarvisWebSocket(options?: UseJarvisWebSocketOptions) {
   const VALID_ACTIONS: ReadonlySet<string> = new Set(['show', 'hide', 'toggle']);
 
   const connect = useCallback(() => {
-    const url = `${GW_URL}/ws`;
+    const url = `${getGatewayUrl()}/ws`;
     console.log('[jarvis] connecting to', url);
     const ws = new WebSocket(url);
     wsRef.current = ws;

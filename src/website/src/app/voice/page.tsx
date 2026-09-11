@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Mic, MicOff, Volume2 } from 'lucide-react';
 
-const VOICE_URL = process.env.NEXT_PUBLIC_VOICE_URL || 'wss://localhost/voice-pipeline/';
+function getVoiceUrl(): string {
+  if (process.env.NEXT_PUBLIC_VOICE_URL) return process.env.NEXT_PUBLIC_VOICE_URL;
+  if (typeof window !== 'undefined') {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}/voice-pipeline/`;
+  }
+  return 'wss://localhost/voice-pipeline/';
+}
+
 const SAMPLE_RATE = 16000;
 const CHUNK_MS = 100;
 const RECONNECT_DELAY_MS = 3000;
@@ -106,9 +114,10 @@ export default function VoicePage() {
     if (!activeRef.current) return;
     if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
+    const voiceUrl = getVoiceUrl();
     setStatus('reconnecting');
-    console.log('[voice] connecting to', VOICE_URL);
-    const ws = new WebSocket(VOICE_URL);
+    console.log('[voice] connecting to', voiceUrl);
+    const ws = new WebSocket(voiceUrl);
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 

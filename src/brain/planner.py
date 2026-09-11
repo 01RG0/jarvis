@@ -112,8 +112,11 @@ def skill_node(state: TaskState) -> TaskState:
 
 
 def fast_node(state: TaskState) -> TaskState:
-    from memory import get_memory
-    context = get_memory().get_context(state['input'])
+    try:
+        from memory import get_memory
+        context = get_memory().get_context(state['input'])
+    except Exception:
+        context = ''
     prompt = f'{context}\n\n{state["input"]}' if context else state['input']
     res = call_llm('fast', prompt)
     return {
@@ -304,6 +307,7 @@ async def handle_task(task_id: str, input: str, model: str = "balanced") -> dict
         'memory_context': '',
         'skill_context': '',
         'tool_result': '',
+        'widget_cmd': {},
     }
     result_state = await asyncio.get_running_loop().run_in_executor(None, graph.invoke, state)
     return {
@@ -311,4 +315,5 @@ async def handle_task(task_id: str, input: str, model: str = "balanced") -> dict
         "model_used": result_state["model_used"],
         "cost_usd": result_state["cost_usd"],
         "duration_ms": result_state["duration_ms"],
+        "widget_cmd": result_state.get("widget_cmd") or None,
     }

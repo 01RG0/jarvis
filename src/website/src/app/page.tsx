@@ -148,20 +148,23 @@ export default function HomePage() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA';
+      // Always handle Escape even when typing — close focused widget
+      if (e.key === 'Escape') {
+        widgets.hide('chat');
+        widgets.hide('stats');
+        widgets.hide('memory');
+        widgets.hide('settings');
+        setCtxMenu(null);
+        return;
+      }
+      if (isTyping) return;
       switch (e.key.toLowerCase()) {
         case 'c': widgets.toggle('chat');      break;
         case 's': widgets.toggle('stats');    break;
         case 'm': widgets.toggle('memory');   break;
         case 'v': handleMicToggle();          break;
         case 'p': widgets.spawn('providers'); break;
-        case 'escape':
-          widgets.hide('chat');
-          widgets.hide('stats');
-          widgets.hide('memory');
-          widgets.hide('settings');
-          setCtxMenu(null);
-          break;
       }
     }
     window.addEventListener('keydown', onKey);
