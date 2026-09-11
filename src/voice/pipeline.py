@@ -48,6 +48,7 @@ async def _run_session() -> None:
         from pipecat.processors.aggregators.llm_context import LLMContext
         from pipecat.processors.aggregators.llm_response_universal import (
             LLMContextAggregatorPair,
+            LLMUserAggregatorParams,
         )
         from pipecat.transports.websocket.server import (
             SingleClientWebsocketServerParams,
@@ -65,9 +66,6 @@ async def _run_session() -> None:
             params=SingleClientWebsocketServerParams(
                 audio_out_enabled=True,
                 audio_in_enabled=True,
-                vad_enabled=True,
-                vad_analyzer=SileroVADAnalyzer(),
-                vad_audio_passthrough=True,
                 serializer=RawPCMSerializer(),
             ),
         )
@@ -80,7 +78,10 @@ async def _run_session() -> None:
         )
 
         context = LLMContext(messages=[{'role': 'system', 'content': JARVIS_SYSTEM}])
-        user_agg, assistant_agg = LLMContextAggregatorPair(context)
+        user_agg, assistant_agg = LLMContextAggregatorPair(
+            context,
+            user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+        )
 
         pipeline = Pipeline([
             transport.input(),
