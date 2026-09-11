@@ -2,10 +2,11 @@ import asyncio
 import json
 import logging
 import os
-import re
 import traceback
+import uuid
 from typing import Callable
 
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,39 +14,27 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 VOICE_WS_PORT = int(os.environ.get('VOICE_WS_PORT', '8765'))
-VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'openai/gpt-oss-20b')
+BRAIN_URL = os.environ.get('BRAIN_URL', 'http://localhost:8000')
 SAMPLE_RATE = 16000
-
-# Pipecat 1.9: system_instruction goes on the LLM service, NOT in context messages.
-# "J.A.R.V.I.S." with periods causes TTS to spell out each letter — use "JARVIS".
-JARVIS_SYSTEM = (
-    "You are JARVIS, the personal AI assistant. "
-    "Speak naturally and conversationally, as if talking aloud — never write lists, "
-    "bullet points, asterisks, or markdown. "
-    "Be concise: one or two sentences maximum per response. "
-    "Maintain calm confidence with a hint of dry wit. "
-    "Address the user as 'sir' occasionally. "
-    "Never break character. Never spell out acronyms or abbreviations letter by letter."
-)
 
 VALID_VOICES = {'autumn', 'diana', 'hannah', 'austin', 'daniel', 'troy'}
 
-# Characters/patterns TTS reads aloud as noise — strip before sending to TTS
-_TTS_STRIP = re.compile(r'[*_`#~|\\]|^\s*[-•]\s*', re.MULTILINE)
 
-
-def _clean_for_tts(text: str) -> str:
-    """Remove markdown symbols that TTS would speak literally."""
-    return _TTS_STRIP.sub('', text).strip()
-
-
+from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.serializers.base_serializer import FrameSerializer
-from pipecat.frames.frames import Frame, InputAudioRawFrame, OutputAudioRawFrame
+from pipecat.frames.frames import (
+    Frame,
+    InputAudioRawFrame,
+    OutputAudioRawFrame,
+    LLMContextFrame,
+    LLMTextFrame,
+    LLMFullResponseStartFrame,
+    LLMFullResponseEndFrame,
+)
 
 
 class RawPCMSerializer(FrameSerializer):
-    """Converts raw Int16 PCM bytes ↔ pipecat audio frames.
-    Also handles the JSON voice-config message the browser sends on connect."""
+    """Raw Int16 PCM bytes ↔ pipecat audio frames. Also handles voice-config JSON."""
 
     def __init__(self, on_voice_config: Callable[[str], None] | None = None) -> None:
         self._on_voice_config = on_voice_config
@@ -71,13 +60,73 @@ class RawPCMSerializer(FrameSerializer):
         return None
 
 
+class BrainLLMProcessor(FrameProcessor):
+    """Routes each LLM turn through the Jarvis brain API (LangGraph + memory + tools).
+
+    The brain has full context: smart home, tasks, widgets, PC control, and memory.
+    This replaces the direct Groq LLM call so voice JARVIS is the same brain as chat.
+    """
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+
+        if isinstance(frame, LLMContextFrame):
+            await self._handle_context(frame.context)
+        else:
+            await self.push_frame(frame, direction)
+
+    async def _handle_context(self, context) -> None:
+        user_text = self._extract_user_text(context)
+        if not user_text.strip():
+            return
+
+        logger.info('Sending to brain: %r', user_text[:120])
+        response_text = await self._call_brain(user_text)
+
+        await self.push_frame(LLMFullResponseStartFrame())
+        # Emit in small chunks so TTS can start speaking sooner
+        chunk_size = 120
+        for i in range(0, len(response_text), chunk_size):
+            await self.push_frame(LLMTextFrame(text=response_text[i:i + chunk_size]))
+        await self.push_frame(LLMFullResponseEndFrame())
+
+    @staticmethod
+    def _extract_user_text(context) -> str:
+        """Get the latest user turn text from an LLMContext."""
+        try:
+            messages = context.get_messages()
+        except Exception:
+            return ''
+        for msg in reversed(messages):
+            if msg.get('role') != 'user':
+                continue
+            content = msg.get('content', '')
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get('type') == 'text':
+                        return part['text']
+        return ''
+
+    async def _call_brain(self, text: str) -> str:
+        payload = {'id': str(uuid.uuid4()), 'input': text, 'model': 'fast'}
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(f'{BRAIN_URL}/task', json=payload)
+                resp.raise_for_status()
+                return resp.json().get('result', '')
+        except Exception as exc:
+            logger.error('Brain API error: %s', exc)
+            return "I'm sorry, sir. I'm having difficulty reaching my core systems right now."
+
+
 async def _run_session() -> None:
     try:
         from pipecat.audio.vad.silero import SileroVADAnalyzer
         from pipecat.pipeline.pipeline import Pipeline
         from pipecat.pipeline.worker import PipelineParams, PipelineWorker
         from pipecat.workers.runner import WorkerRunner
-        from pipecat.services.groq.llm import GroqLLMService
         from pipecat.processors.aggregators.llm_context import LLMContext
         from pipecat.processors.aggregators.llm_response_universal import (
             LLMContextAggregatorPair,
@@ -88,10 +137,7 @@ async def _run_session() -> None:
             SingleClientWebsocketServerTransport,
         )
 
-        from stt_factory import get_stt_service
         from tts_factory import get_tts_service
-
-        groq_key = os.environ.get('GROQ_API_KEY', '')
 
         tts_holder: list = []
 
@@ -118,20 +164,14 @@ async def _run_session() -> None:
             ),
         )
 
+        from stt_factory import get_stt_service
         stt = get_stt_service()
         tts = get_tts_service()
         tts_holder.append(tts)
 
-        # system_instruction on the LLM service (pipecat 1.9 — not in context messages)
-        llm = GroqLLMService(
-            api_key=groq_key,
-            settings=GroqLLMService.Settings(
-                model=VOICE_LLM_MODEL,
-                system_instruction=JARVIS_SYSTEM,
-            ),
-        )
+        brain = BrainLLMProcessor()
 
-        # Empty context — no system message here (moved to LLM service above)
+        # Empty context — system prompt lives in the brain, not here
         context = LLMContext()
         user_agg, assistant_agg = LLMContextAggregatorPair(
             context,
@@ -142,7 +182,7 @@ async def _run_session() -> None:
             transport.input(),
             stt,
             user_agg,
-            llm,
+            brain,
             tts,
             transport.output(),
             assistant_agg,
