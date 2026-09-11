@@ -40,12 +40,14 @@ def get_tts_service():
         api_key = os.environ.get('GROQ_API_KEY')
         assert api_key, 'GROQ_API_KEY is required when TTS_PROVIDER=groq'
         from pipecat.services.groq.tts import GroqTTSService
+        from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
         return GroqTTSService(
             api_key=api_key,
             settings=GroqTTSService.Settings(
                 model=os.environ.get('GROQ_TTS_MODEL', 'canopylabs/orpheus-v1-english'),
                 voice=os.environ.get('GROQ_TTS_VOICE', 'daniel'),
             ),
+            text_filters=[MarkdownTextFilter()],
         )
     else:
         raise ValueError(

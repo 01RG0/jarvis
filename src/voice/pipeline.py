@@ -1,7 +1,10 @@
 import asyncio
+import json
 import logging
 import os
+import re
 import traceback
+from typing import Callable
 
 from dotenv import load_dotenv
 
@@ -10,27 +13,38 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 VOICE_WS_PORT = int(os.environ.get('VOICE_WS_PORT', '8765'))
-VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'llama-3.3-70b-versatile')
+VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'openai/gpt-oss-20b')
 SAMPLE_RATE = 16000
 
+# Pipecat 1.9: system_instruction goes on the LLM service, NOT in context messages.
+# "J.A.R.V.I.S." with periods causes TTS to spell out each letter — use "JARVIS".
 JARVIS_SYSTEM = (
-    "You are J.A.R.V.I.S. — Just A Rather Very Intelligent System, the personal AI of your user. "
-    "You speak with calm precision and dry wit. Keep voice responses concise — 1-3 sentences. "
-    "Address the user respectfully. Never break character."
+    "You are JARVIS, the personal AI assistant. "
+    "Speak naturally and conversationally, as if talking aloud — never write lists, "
+    "bullet points, asterisks, or markdown. "
+    "Be concise: one or two sentences maximum per response. "
+    "Maintain calm confidence with a hint of dry wit. "
+    "Address the user as 'sir' occasionally. "
+    "Never break character. Never spell out acronyms or abbreviations letter by letter."
 )
 
+VALID_VOICES = {'autumn', 'diana', 'hannah', 'austin', 'daniel', 'troy'}
 
-import json
-from typing import Callable
+# Characters/patterns TTS reads aloud as noise — strip before sending to TTS
+_TTS_STRIP = re.compile(r'[*_`#~|\\]|^\s*[-•]\s*', re.MULTILINE)
+
+
+def _clean_for_tts(text: str) -> str:
+    """Remove markdown symbols that TTS would speak literally."""
+    return _TTS_STRIP.sub('', text).strip()
+
 
 from pipecat.serializers.base_serializer import FrameSerializer
 from pipecat.frames.frames import Frame, InputAudioRawFrame, OutputAudioRawFrame
 
-VALID_VOICES = {'autumn', 'diana', 'hannah', 'austin', 'daniel', 'troy'}
-
 
 class RawPCMSerializer(FrameSerializer):
-    """Converts raw Int16 PCM bytes ↔ pipecat audio frames (no RTVI/protobuf framing).
+    """Converts raw Int16 PCM bytes ↔ pipecat audio frames.
     Also handles the JSON voice-config message the browser sends on connect."""
 
     def __init__(self, on_voice_config: Callable[[str], None] | None = None) -> None:
@@ -79,7 +93,6 @@ async def _run_session() -> None:
 
         groq_key = os.environ.get('GROQ_API_KEY', '')
 
-        # tts_holder lets the voice-config callback reach the TTS service after it's created
         tts_holder: list = []
 
         def _on_voice_config(voice: str) -> None:
@@ -108,12 +121,18 @@ async def _run_session() -> None:
         stt = get_stt_service()
         tts = get_tts_service()
         tts_holder.append(tts)
+
+        # system_instruction on the LLM service (pipecat 1.9 — not in context messages)
         llm = GroqLLMService(
             api_key=groq_key,
-            settings=GroqLLMService.Settings(model=VOICE_LLM_MODEL),
+            settings=GroqLLMService.Settings(
+                model=VOICE_LLM_MODEL,
+                system_instruction=JARVIS_SYSTEM,
+            ),
         )
 
-        context = LLMContext(messages=[{'role': 'system', 'content': JARVIS_SYSTEM}])
+        # Empty context — no system message here (moved to LLM service above)
+        context = LLMContext()
         user_agg, assistant_agg = LLMContextAggregatorPair(
             context,
             user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
