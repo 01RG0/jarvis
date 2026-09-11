@@ -9,7 +9,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 VOICE_WS_PORT = int(os.environ.get('VOICE_WS_PORT', '8765'))
-VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'qwen/qwen3.8-27b')
+VOICE_LLM_MODEL = os.environ.get('VOICE_LLM_MODEL', 'llama-3.3-70b-versatile')
 SAMPLE_RATE = 16000
 
 JARVIS_SYSTEM = (

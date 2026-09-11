@@ -16,12 +16,12 @@ fi
 "$VENV/bin/python" -m pip install -q --no-cache-dir --upgrade pip
 "$VENV/bin/python" -m pip install -q --no-cache-dir -r requirements.txt
 
-echo "==> Restarting brain service..."
-sudo systemctl restart jarvis-brain
-
 echo "==> Installing brain service..."
 sudo cp "$JARVIS_DIR/deploy/jarvis-brain.service" /etc/systemd/system/jarvis-brain@rootuser.service
 sudo systemctl daemon-reload
+
+echo "==> Restarting brain service..."
+sudo systemctl restart jarvis-brain
 
 sleep 5
 if ! sudo systemctl is-active --quiet jarvis-brain@rootuser 2>/dev/null && ! sudo systemctl is-active --quiet jarvis-brain 2>/dev/null; then
@@ -37,8 +37,12 @@ python3 -m venv --clear "$VENV_VOICE"
 "$VENV_VOICE/bin/python" -m pip install -q --no-cache-dir --upgrade pip
 "$VENV_VOICE/bin/python" -m pip install -q --no-cache-dir -r "$JARVIS_DIR/src/voice/requirements.txt"
 
+echo "==> Installing voice service..."
+sudo cp "$JARVIS_DIR/deploy/jarvis-voice.service" /etc/systemd/system/jarvis-voice@rootuser.service
+sudo systemctl daemon-reload
+
 echo "==> Restarting voice service..."
-sudo systemctl restart jarvis-voice
+sudo systemctl restart jarvis-voice@rootuser || sudo systemctl restart jarvis-voice || true
 
 # ── Go sidecar ───────────────────────────────────────────────────────────────
 echo "==> Building Go sidecar..."

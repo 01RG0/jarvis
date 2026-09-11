@@ -1,0 +1,18 @@
+[Unit]
+Description=JARVIS Voice Pipeline (Pipecat)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/jarvis/src/voice
+EnvironmentFile=/home/%i/jarvis/.env
+ExecStart=/home/%i/jarvis/.venv-voice/bin/python pipeline.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

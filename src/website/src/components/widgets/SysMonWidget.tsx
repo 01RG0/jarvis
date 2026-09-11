@@ -115,6 +115,11 @@ export default function SysMonWidget({ onClose }: { onClose: () => void }) {
             CONNECTING...
           </span>
         )}
+        {connected && !stats && (
+          <span style={{ fontFamily: 'monospace', fontSize: 9, color: 'rgba(0,168,255,0.4)', letterSpacing: '0.1em' }}>
+            WAITING FOR DATA…
+          </span>
+        )}
         {rows.map(s => (
           <div key={s.label}>
             <div style={{
