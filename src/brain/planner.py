@@ -118,8 +118,18 @@ def fast_node(state: TaskState) -> TaskState:
     try:
         from memory import get_memory
         context = get_memory().get_context(state['input'])
+        try:
+            from metrics import inc_memory_hit
+            inc_memory_hit()
+        except Exception:
+            pass
     except Exception:
         context = ''
+        try:
+            from metrics import inc_memory_error
+            inc_memory_error()
+        except Exception:
+            pass
     prompt = f'{context}\n\n{state["input"]}' if context else state['input']
     res = call_llm('fast', prompt)
     return {
@@ -232,8 +242,17 @@ def save_memory_node(state: TaskState) -> TaskState:
         try:
             from memory import get_memory
             get_memory().update_from_conversation(state['input'], state['result'])
+            try:
+                from metrics import inc_memory_hit
+                inc_memory_hit()
+            except Exception:
+                pass
         except Exception:
-            pass
+            try:
+                from metrics import inc_memory_error
+                inc_memory_error()
+            except Exception:
+                pass
         outcome: OutcomeType = 'success' if state['attempts'] <= 1 else 'retry'
         record_outcome(
             task_input=state['input'],

@@ -104,5 +104,18 @@ else
     echo "WARN: could not detect domain, skipping nginx update"
 fi
 
+# ── Prometheus + Grafana (optional — skip if not installed) ──────────────────
+echo "==> Configuring observability (optional)..."
+if command -v prometheus >/dev/null 2>&1 || [ -f /usr/bin/prometheus ]; then
+    sudo cp "$JARVIS_DIR/deploy/prometheus.yml" /etc/prometheus/prometheus.yml
+    sudo systemctl restart prometheus || true
+    echo "==> Prometheus reloaded"
+fi
+if command -v grafana-server >/dev/null 2>&1 || [ -f /usr/sbin/grafana-server ]; then
+    sudo cp "$JARVIS_DIR/deploy/grafana-datasource.yml" /etc/grafana/provisioning/datasources/jarvis.yml
+    sudo systemctl restart grafana-server || true
+    echo "==> Grafana reloaded"
+fi
+
 echo "==> Deploy complete. Services status:"
 sudo systemctl is-active jarvis-brain jarvis-sidecar jarvis-gateway jarvis-website jarvis-voice || true

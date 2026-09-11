@@ -177,6 +177,12 @@ async def submit_task(task: TaskRequest) -> TaskResponse:
     result, model_used, cost_usd, duration_ms = _normalize_result(
         raw, task.model, elapsed_ms
     )
+    try:
+        from metrics import record_task, record_llm_call
+        record_task(task.model, elapsed_ms / 1000)
+        record_llm_call(model_used, 'task', duration_ms / 1000, cost_usd)
+    except Exception:
+        pass
     widget_cmd = raw.get("widget_cmd") if isinstance(raw, dict) else None
     log_call(task.input, result, model_used, cost_usd, duration_ms)
     if cost_usd > 0 or len(result) > 50:
@@ -532,6 +538,16 @@ async def submit_parallel_tasks(body: ParallelTaskRequest) -> dict:
             return {"task_id": task.id, "result": "", "model_used": task.model, "cost_usd": 0.0, "duration_ms": int((time.perf_counter() - start) * 1000), "error": str(e)}
     results = await asyncio.gather(*[_run_one(t) for t in body.tasks])
     return {"results": list(results)}
+
+
+@app.get("/metrics")
+async def prometheus_metrics():
+    from fastapi.responses import Response
+    try:
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    except Exception:
+        return Response("", media_type="text/plain")
 
 
 @app.get("/api/agents/available")
