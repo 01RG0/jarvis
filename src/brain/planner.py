@@ -57,8 +57,11 @@ def route_node(state: TaskState) -> TaskState:
 
 
 def memory_node(state: TaskState) -> TaskState:
-    from memory import get_memory
-    context = get_memory().get_context(state['input'])
+    try:
+        from memory import get_memory
+        context = get_memory().get_context(state['input'])
+    except Exception:
+        context = ''
     try:
         import win32gui
         title = win32gui.GetWindowText(win32gui.GetForegroundWindow())
@@ -226,8 +229,11 @@ def output_node(state: TaskState) -> TaskState:
 def save_memory_node(state: TaskState) -> TaskState:
     from learning import OutcomeType, record_outcome
     if state['result'] and not state['error']:
-        from memory import get_memory
-        get_memory().update_from_conversation(state['input'], state['result'])
+        try:
+            from memory import get_memory
+            get_memory().update_from_conversation(state['input'], state['result'])
+        except Exception:
+            pass
         outcome: OutcomeType = 'success' if state['attempts'] <= 1 else 'retry'
         record_outcome(
             task_input=state['input'],

@@ -27,7 +27,7 @@ def get_mem0_config() -> dict:
             },
         },
         "embedder": {
-            "provider": "google",
+            "provider": "gemini",
             "config": {
                 "model": _embed_model_id,
                 "api_key": os.environ.get("GEMINI_API_KEY", ""),
